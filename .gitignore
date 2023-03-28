@@ -1,3 +1,9 @@
+debug.svd
+debug.cfg
+.vscode
+.idea
+.DS_Store
+
 # Prerequisites
 *.d
 

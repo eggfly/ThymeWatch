@@ -1,0 +1,8 @@
+#pragma once
+
+// ESP_GPIO_WAKEUP_GPIO_HIGH
+#define DEFAULT_WAKEUP_LEVEL    ESP_GPIO_WAKEUP_GPIO_LOW
+#define WAKEUP_PIN_UP        4
+#define WAKEUP_PIN_DOWN      5
+
+#define BUTTON_PIN 9
