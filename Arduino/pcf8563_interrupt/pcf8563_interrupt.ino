@@ -6,7 +6,7 @@ RTC_PCF8563 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 // use D2 for INT0; attach to CLKOUT pin on RTC
-const uint8_t INT_PIN = 1;
+const uint8_t INT_PIN = 0;
 
 // flag to update serial; set in interrupt callback
 volatile uint8_t tick_tock = 1;

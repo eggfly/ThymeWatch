@@ -6,8 +6,9 @@
 #define TFT_WHITE 0b111
 #define TFT_BLACK 0b0
 
-#define BTN_UP 4
-#define BTN_DOWN 9
+#define BTN_UP   4
+#define BTN_DOWN 5
+#define BTN_MID  9
 
 PROGMEM unsigned char dino[][1155] = {{
     0x00, 0x00, 0xF8, 0x3F, 0x00, 0x00, 0x00, 0xFC, 0x7F, 0x00, 0x00, 0x00,

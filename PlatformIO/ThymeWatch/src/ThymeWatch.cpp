@@ -1,79 +1,36 @@
+#include "colors.h"
 #include "display.h"
+#include "lock_screen.h"
 #include <esp_sleep.h>
 
 #define LV_COLOR_DEPTH 16
 #define LV_COLOR_16_SWAP 0
 
-#include "frame_00.h"
-#include "frame_01.h"
-#include "frame_02.h"
-#include "frame_03.h"
-#include "frame_04.h"
-#include "frame_05.h"
-#include "frame_06.h"
-#include "frame_07.h"
-#include "frame_08.h"
-#include "frame_09.h"
-#include "frame_10.h"
-#include "frame_11.h"
+#include "res/nyan_cat_frames.h"
 
 #include "_8colors.h"
 #include "macos_face.h"
 #include "macos_face_color.h"
 #include "round_face_1.h"
 
-#include "flappy_bird.h"
+#include "games/flappy_bird.h"
 #include "rtc.h"
 #include "t_rex.h"
 
-// #include "Fonts/LECO_1976_Regular10pt7b.h"
-// #include "Fonts/LECO_1976_Regular1pt7b.h"
-// #include "Fonts/LECO_1976_Regular20pt7b.h"
-// #include "Fonts/LECO_1976_Regular2pt7b.h"
-// #include "Fonts/LECO_1976_Regular38pt7b.h"
-// #include "Fonts/LECO_1976_Regular3pt7b.h"
-// #include "Fonts/LECO_1976_Regular4pt7b.h"
-// #include "Fonts/LECO_1976_Regular5pt7b.h"
-// #include "Fonts/LECO_1976_Regular6pt7b.h"
-// #include "Fonts/LECO_1976_Regular7pt7b.h"
-// #include "Fonts/LECO_1976_Regular8pt7b.h"
-// #include "Fonts/LECO_1976_Regular9pt7b.h"
-
-// #include "Fonts/RasterGothic18CondBold8pt7b.h"
-// #include "Fonts/RasterGothic18CondBold9pt7b.h"
-// #include "Fonts/RasterGothic18CondBold10pt7b.h"
-// #include "Fonts/RasterGothic18CondBold11pt7b.h"
-// #include "Fonts/RasterGothic18CondBold12pt7b.h"
-// #include "Fonts/RasterGothic18CondBold13pt7b.h"
-// #include "Fonts/RasterGothic18CondBold14pt7b.h"
-// #include "Fonts/RasterGothic18CondBold15pt7b.h"
-// #include "Fonts/RasterGothic18CondBold16pt7b.h"
-// #include "Fonts/RasterGothic18CondBold17pt7b.h"
-// #include "Fonts/RasterGothic18CondBold18pt7b.h"
-
-// #include "Fonts/RasterGothic24CondBold12pt7b.h"
-
-// #include <Fonts/FreeMono24pt7b.h>
-// #include <Fonts/FreeMonoBold12pt7b.h>
-
-#include "font/u8g2_font_unifont_t_chinese.h"
-// TODO: wqt smaller font
-
+#include "buttons.h"
 #include "color_defs.h"
 #include "config.h"
+#include "datetime_picker.h"
 #include "gfx_utils.h"
 #include "icons.h"
 #include "utils.h"
 
 #define ENABLE_DEEP_SLEEP 1
 
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 128
-
 /* Conversion factor for micro seconds to seconds */
 #define uS_TO_S_FACTOR 1000000
 /* Time ESP32 will go to sleep (in seconds) */
-#define TIME_TO_SLEEP 60*60*12
+#define TIME_TO_SLEEP 60 * 60 * 12
 
 // Set the size of the display here, e.g. 144x168!
 // Adafruit_SharpMem display(SHARP_SCK, SHARP_MOSI, SHARP_SS, 144, 168);
@@ -81,17 +38,6 @@
 // requires > 4K of microcontroller RAM; it WILL NOT WORK on Arduino Uno
 // or other <4K "classic" devices!  The original display (96x96 pixels)
 // does work there, but is no longer produced.
-
-#define BLACK 0
-#define WHITE 1
-
-// BGR order
-#define THREE_BIT_BLACK 0b000
-#define THREE_BIT_WHITE 0b111
-#define THREE_BIT_RED 0b001
-#define THREE_BIT_GREEN 0b010
-#define THREE_BIT_BLUE 0b100
-#define THREE_BIT_YELLOW 0b011
 
 int minorHalfSize; // 1/2 of lesser of display width or height
 
@@ -154,13 +100,13 @@ void show_macos_time_8_colors() {
            now.day());
 
   canvas.setCursor(10, 53);
-  // canvas.setFont(&LECO_1976_Regular9pt7b);
+  canvas.setFont(&LECO_1976_Regular9pt7b);
   canvas.print(time_str);
   canvas.setCursor(9, 70);
-  // canvas.setFont(&LECO_1976_Regular5pt7b);
+  canvas.setFont(&LECO_1976_Regular5pt7b);
   canvas.print(date_str);
   canvas.setCursor(9, 82);
-  // canvas.setFont(&LECO_1976_Regular5pt7b);
+  canvas.setFont(&LECO_1976_Regular5pt7b);
   canvas.print(daysOfTheWeek[now.dayOfTheWeek()]);
 
   char vbat_str[10];
@@ -170,14 +116,14 @@ void show_macos_time_8_colors() {
   canvas.setTextColor(THREE_BIT_BLACK);
   snprintf(vbat_str, sizeof(vbat_str), "%.1f%%", real_vbat);
   canvas.setCursor(100, 12);
-  // canvas.setFont(nullptr);
+  canvas.setFont(nullptr);
   canvas.print(vbat_str);
 
-  // canvas.setFont(&LECO_1976_Regular5pt7b);
-  //   canvas.printf("%.4f", real_vbat);
-  //   canvas.println("V");
-  //   canvas.print(last_cost);
-  //   canvas.println("ms");
+  canvas.setFont(&LECO_1976_Regular5pt7b);
+  canvas.printf("%.4f", real_vbat);
+  canvas.println("V");
+  canvas.print(last_cost);
+  canvas.println("ms");
   canvas.refresh();
   last_cost = millis() - boot_time;
 }
@@ -192,7 +138,7 @@ void show_timeline_watch_face() {
   canvas.set3BitDrawPixelMode(false);
   canvas.fillRect(0, 80, 128, 48, THREE_BIT_GREEN);
   canvas.fillTriangle(58, 80, 68, 80, 63, 85, THREE_BIT_WHITE);
-  // canvas.setFont(&LECO_1976_Regular38pt7b);
+  canvas.setFont(&LECO_1976_Regular38pt7b);
   canvas.setTextColor(THREE_BIT_BLACK);
   canvas.setCursor(22, 65);
   canvas.print(hour_str);
@@ -261,9 +207,53 @@ void show_round_watch_face_pointer() {
   delay(500000);
 }
 
+int8_t gSelectedItem = 0;
+
+typedef struct {
+  const char *title;
+  const char *subtitle;
+  const uint8_t *xbm_icon;
+  uint16_t icon_width;
+  uint16_t icon_height;
+} MenuItem;
+
+MenuItem home_menu_items[] = {
+    {
+        .title = "Settings",
+        .subtitle = nullptr,
+        .xbm_icon = pref_20x20,
+        .icon_width = 20,
+        .icon_height = 20,
+    },
+    {
+        .title = "Notifications",
+        .subtitle = nullptr,
+        .xbm_icon = notifications_20x20,
+        .icon_width = 20,
+        .icon_height = 20,
+    },
+    {
+        .title = "Time",
+        .subtitle = nullptr,
+        .xbm_icon = alarm_20x20,
+        .icon_width = 20,
+        .icon_height = 20,
+    },
+    {
+        .title = "Alarms",
+        .subtitle = nullptr,
+        .xbm_icon = alarm_20x20,
+        .icon_width = 20,
+        .icon_height = 20,
+    },
+};
+
+const size_t home_menu_items_count =
+    sizeof(home_menu_items) / sizeof(home_menu_items[0]);
+
 void show_home_menu() {
   uint8_t themeColor = THREE_BIT_BLUE;
-  // canvas.setFont(&LECO_1976_Regular5pt7b);
+  canvas.setFont(&LECO_1976_Regular5pt7b);
   canvas.fillScreen(THREE_BIT_WHITE);
   canvas.fillRect(0, 0, 128, 20, themeColor);
   canvas.setCursor(52, 18);
@@ -277,58 +267,52 @@ void show_home_menu() {
                         VERTICAL_MIDDLE);
   uint8_t systemBarHeight = 16;
   uint8_t menuItemHeight = 36;
-  canvas.fillRect(0, systemBarHeight, 128, menuItemHeight, themeColor);
+  // canvas.fillRect(0, systemBarHeight, 128, menuItemHeight, themeColor);
   canvas.drawFastHLine(0, systemBarHeight - 1, 128, THREE_BIT_WHITE);
   canvas.drawXBitmap(127 - 20 - 4, 4, battery_charging_20x7, 20, 7,
                      THREE_BIT_WHITE);
   auto cursor_y = systemBarHeight + (menuItemHeight - 20) / 2;
-  // item 1
-  canvas.drawXBitmap(8, cursor_y, pref_20x20, 20, 20, THREE_BIT_WHITE);
+  for (size_t i = 0; i < home_menu_items_count; i++) {
+    bool selected = gSelectedItem == i;
+    if (selected) {
+      canvas.fillRoundRect(1, systemBarHeight + i * menuItemHeight, 128 - 2,
+                           menuItemHeight, systemBarHeight / 2, themeColor);
+    }
+    uint16_t itemColor = selected ? THREE_BIT_WHITE : THREE_BIT_BLACK;
+    MenuItem *item = home_menu_items + i;
+    canvas.drawXBitmap(8, cursor_y, item->xbm_icon, item->icon_width,
+                       item->icon_height, itemColor);
+    canvas.setFont(&RasterGothic18CondBold9pt7b);
+    canvas.setTextSize(1);
+    canvas.setTextColor(itemColor);
+    drawTextWithAlignment(&canvas, item->title, 128 / 2,
+                          systemBarHeight + i * menuItemHeight +
+                              menuItemHeight / 2,
+                          HORIZONTAL_CENTER, VERTICAL_MIDDLE);
+    cursor_y += menuItemHeight;
+  }
+  // // item 1
+  // canvas.drawXBitmap(8, cursor_y, pref_20x20, 20, 20, THREE_BIT_WHITE);
   // canvas.setFont(&RasterGothic18CondBold9pt7b);
-  canvas.setTextSize(1);
-  canvas.setTextColor(THREE_BIT_WHITE);
-  drawTextWithAlignment(&canvas, "Settings", 128 / 2,
-                        systemBarHeight + menuItemHeight / 2, HORIZONTAL_CENTER,
-                        VERTICAL_MIDDLE);
-  // canvas.printUTF8("你好世界");
-  // item 2
-  cursor_y += menuItemHeight;
-  canvas.drawXBitmap(8, cursor_y, notifications_20x20, 20, 20, THREE_BIT_BLACK);
-  canvas.setTextColor(THREE_BIT_BLACK);
-  drawTextWithAlignment(&canvas, "Notifications", 128 / 2,
-                        systemBarHeight + menuItemHeight / 2 + menuItemHeight,
-                        HORIZONTAL_CENTER, VERTICAL_MIDDLE);
-  // item 3
-  cursor_y += menuItemHeight;
-  canvas.drawXBitmap(8, cursor_y, alarm_20x20, 20, 20, THREE_BIT_BLACK);
-  drawTextWithAlignment(&canvas, "Alarms", 128 / 2,
-                        systemBarHeight + menuItemHeight / 2 +
-                            menuItemHeight * 2,
-                        HORIZONTAL_CENTER, VERTICAL_MIDDLE);
-
-  u8g2_for_adafruit_gfx.setFontMode(1);
-  // use u8g2 transparent mode (this is default)
-  u8g2_for_adafruit_gfx.setFontDirection(0); // left to right (this is default)
-  u8g2_for_adafruit_gfx.setForegroundColor(
-      THREE_BIT_BLACK); // apply Adafruit GFX color
-  // u8g2_for_adafruit_gfx.setFont(u8g2_font_helvR14_tf);
-  // select u8g2 font from here:
-  // https://github.com/olikraus/u8g2/wiki/fntlistall
-  u8g2_for_adafruit_gfx.setFont(u8g2_font_unifont_t_chinese);
-  u8g2_for_adafruit_gfx.setCursor(30, 80); // start writing at this position
-  u8g2_for_adafruit_gfx.print(F("Hello World"));
-  u8g2_for_adafruit_gfx.setCursor(30, 100); // start writing at this position
-  u8g2_for_adafruit_gfx.print(F("你好世界"));
-  u8g2_for_adafruit_gfx.setCursor(0, 16);
-  u8g2_for_adafruit_gfx.print(
-      F("Arduino "
-        "是一個開源嵌入式硬體平台，用來供用戶製作可互動式的嵌入式專案。此外 "
-        "Arduino "
-        "作為一個開源硬體和開源軟件的公司，同時兼有專案和用戶社群。該公司負責設"
-        "計和製造Arduino電路板及相關附件。這些產品按照GNU寬通用公共許可證（LGPL"
-        "）或GNU通用公共許可證（GPL）[1]許可的開源硬體和軟件分發的，Arduino "
-        "允許任何人製造 Arduino 板和軟件分發。 Arduino "
-        "板可以以預裝的形式商業銷售，也可以作為DIY套件購買。"));
+  // canvas.setTextSize(1);
+  // canvas.setTextColor(THREE_BIT_WHITE);
+  // drawTextWithAlignment(&canvas, "Settings", 128 / 2,
+  //                       systemBarHeight + menuItemHeight - menuItemHeight /
+  //                       2, HORIZONTAL_CENTER, VERTICAL_MIDDLE);
+  // // item 2
+  // cursor_y += menuItemHeight;
+  // canvas.drawXBitmap(8, cursor_y, notifications_20x20, 20, 20,
+  // THREE_BIT_BLACK); canvas.setTextColor(THREE_BIT_BLACK);
+  // drawTextWithAlignment(&canvas, "Notifications", 128 / 2,
+  //                       systemBarHeight + menuItemHeight / 2 +
+  //                       menuItemHeight, HORIZONTAL_CENTER, VERTICAL_MIDDLE);
+  // // item 3
+  // cursor_y += menuItemHeight;
+  // canvas.drawXBitmap(8, cursor_y, alarm_20x20, 20, 20, THREE_BIT_BLACK);
+  // drawTextWithAlignment(&canvas, "Alarms", 128 / 2,
+  //                       systemBarHeight + menuItemHeight / 2 +
+  //                           menuItemHeight * 2,
+  //                       HORIZONTAL_CENTER, VERTICAL_MIDDLE);
 
   auto sensorValue = analogRead(2);
   // Serial.println(sensorValue);
@@ -338,115 +322,6 @@ void show_home_menu() {
   canvas.printf("%.4fV", real_vbat);
 
   canvas.refresh();
-}
-
-#define MAX_TRIES 100
-#define CIRCLE_COUNT 16
-struct Circle {
-  int x;
-  int y;
-  int radius;
-};
-
-// Create an array to hold the circles
-Circle circles[CIRCLE_COUNT];
-
-void show_random_ring_face(bool show_seconds) {
-  canvas.fillScreen(THREE_BIT_BLACK);
-  canvas.set3BitDrawPixelMode(false);
-
-  uint8_t centerX = 63;
-  uint8_t centerY = 63;
-  uint8_t min_radius = 4;
-  uint8_t max_radius = 24;
-  // canvas.drawCircle(centerX, centerY, r, THREE_BIT_BLACK);
-  // canvas.drawCircle(centerX, centerY, r - 1, THREE_BIT_BLACK);
-  uint8_t color_base = random(0, 6);
-  for (int i = 0; i < CIRCLE_COUNT; i++) {
-    // Keep trying to generate a non-overlapping circle until we reach the
-    // maximum number of tries
-    int tries = 0;
-    bool overlap = true;
-    while (overlap && tries < MAX_TRIES) {
-      // Generate a random circle with a radius between 5 and 20
-      int x = random(-min_radius, SCREEN_WIDTH + min_radius);
-      int y = random(-min_radius, SCREEN_HEIGHT + min_radius);
-      int radius = random(min_radius, max_radius + 1);
-
-      // Check if this circle overlaps with any of the previous circles
-      overlap = false;
-      for (int j = 0; j < i; j++) {
-        int dx = circles[j].x - x;
-        int dy = circles[j].y - y;
-        int distance = sqrt(dx * dx + dy * dy);
-        if (distance < (circles[j].radius + radius)) {
-          overlap = true;
-          break;
-        }
-      }
-
-      // If the circle does not overlap, add it to the array of circles and draw
-      // it on the screen
-      if (!overlap) {
-        circles[i] = {x, y, radius};
-        // tft.drawCircle(x, y, radius, ST77XX_WHITE);
-        // exclude white and black
-        canvas.drawCircle(x, y, radius, color_base + 1);
-        canvas.drawCircle(x, y, radius - 1, color_base + 1);
-        canvas.drawCircle(x, y, radius - 2, color_base + 1);
-        color_base++;
-        color_base %= 6;
-      }
-      tries++;
-    }
-    // If we could not generate a non-overlapping circle after the maximum
-    // number of tries, break out of the loop
-    if (tries == MAX_TRIES) {
-      break;
-    }
-  }
-  //  for (int i = 0; i < 10; i++) {
-  //    int x = random(0, SCREEN_WIDTH);
-  //    int y = random(0, SCREEN_HEIGHT);
-  //    int radius = random(4, 24);
-  //    canvas.drawCircle(x, y, radius, THREE_BIT_YELLOW);
-  //    canvas.drawCircle(x, y, radius - 1, THREE_BIT_YELLOW);
-  //    canvas.drawCircle(x, y, radius - 2, THREE_BIT_YELLOW);
-  //  }
-
-  DateTime now = rtc.now();
-  char time_str[9];
-  if (show_seconds) {
-    snprintf(time_str, sizeof(time_str), "%02d:%02d:%02d", now.hour(),
-             now.minute(), now.second());
-  } else {
-    snprintf(time_str, sizeof(time_str), "%02d:%02d", now.hour(), now.minute());
-  }
-
-  canvas.setTextColor(THREE_BIT_WHITE);
-  if (show_seconds) {
-    canvas.setCursor(11, 65);
-    // canvas.setFont(&LECO_1976_Regular10pt7b);
-    canvas.print(time_str);
-  } else {
-    canvas.setCursor(11, 65);
-    // canvas.setFont(&LECO_1976_Regular20pt7b);
-    canvas.print(time_str);
-    // canvas.setFont(&LECO_1976_Regular4pt7b);
-    canvas.setCursor(20, 105);
-    // canvas.setFont(nullptr);
-    // canvas.print("Press button to unlock ->");
-  }
-  canvas.setCursor(15, 96);
-  // canvas.setFont(&LECO_1976_Regular9pt7b);
-  canvas.print("SAT 25 MAR");
-  canvas.drawXBitmap(110, 100, unlock_xbm_10x13, 10, 13, THREE_BIT_WHITE);
-  canvas.drawXBitmap(121, 102, arrow_right_7x8, 7, 8, THREE_BIT_WHITE);
-  canvas.drawXBitmap(127 - 23, 5, battery_charging_23x12, 23, 12,
-                     THREE_BIT_WHITE);
-  canvas.drawXBitmap(127 - 23, 25, battery_100_23x12, 23, 12, THREE_BIT_WHITE);
-  canvas.refresh();
-  delay(200);
 }
 
 void show_macos_time() {
@@ -486,7 +361,7 @@ void show_wheel_time() {
   canvas.fillRect(3, 37, 107, 33, THREE_BIT_GREEN);
   canvas.setCursor(3, 37 + 25);
   canvas.setTextSize(1);
-  // canvas.setFont(&LECO_1976_Regular38pt7b);
+  canvas.setFont(&LECO_1976_Regular38pt7b);
   canvas.setTextColor(THREE_BIT_WHITE);
   DateTime now = rtc.now();
   char hours_str[3];
@@ -546,25 +421,33 @@ void show_time() {
 bool btn_up_pressed_on_boot = false;
 bool btn_down_pressed_on_boot = false;
 
+unsigned long serial_cost;
+
 void setup(void) {
   boot_time = millis();
-  btn_up_pressed_on_boot = !digitalRead(WAKEUP_PIN_UP);
-  btn_down_pressed_on_boot = !digitalRead(WAKEUP_PIN_DOWN);
+  // btn_up_pressed_on_boot = !digitalRead(WAKEUP_PIN_UP);
+  // btn_down_pressed_on_boot = !digitalRead(WAKEUP_PIN_DOWN);
   //  if (!ENABLE_DEEP_SLEEP) {
+  auto serial_start_time = micros();
   Serial.begin(115200);
+  serial_cost = micros() - serial_start_time;
   //  }
-  pinMode(SHARP_DISP, OUTPUT);
-  digitalWrite(SHARP_DISP, HIGH);
+  // pinMode(SHARP_DISP, OUTPUT);
+  // digitalWrite(SHARP_DISP, HIGH);
   SPI.begin(SHARP_SCK, 11, SHARP_MOSI, SHARP_SS);
 
   // start & clear the display
   canvas.begin();
-  u8g2_for_adafruit_gfx.begin(canvas);
   canvas.clearDisplay();
   // Several shapes are drawn centered on the screen.  Calculate 1/2 of
   // lesser of display width or height, this is used repeatedly later.
   minorHalfSize = min(canvas.width(), canvas.height()) / 2;
+  Wire.begin(21, 20); // sda=  /scl=
+
+#if defined(ENABLE_RTC)
   init_rtc();
+#endif
+
   if (!ENABLE_DEEP_SLEEP) {
     show_datetime();
   }
@@ -572,6 +455,28 @@ void setup(void) {
   // show_time();
   // canvas.setRotation(0);
   // t_rex_setup();
+  attachInterrupt(BTN_UP, btn_up_isr, FALLING);
+  attachInterrupt(BTN_DOWN, btn_down_isr, FALLING);
+  attachInterrupt(BTN_MID, btn_middle_isr, FALLING);
+}
+
+bool handle_button_events() {
+  if (btn_up_pressed) {
+    btn_up_pressed = false;
+    Serial.println("btn_up pressed\n\n");
+    gSelectedItem--;
+    gSelectedItem %= home_menu_items_count;
+    return true;
+  }
+  if (btn_down_pressed) {
+    btn_down_pressed = false;
+    Serial.println("btn_down pressed\n\n");
+    gSelectedItem++;
+    gSelectedItem %= home_menu_items_count;
+    return true;
+  }
+  // TODO btn middle
+  return false;
 }
 
 void loop(void) {
@@ -588,16 +493,27 @@ void loop(void) {
   // show_round_watch_face_pointer();
   // show_wheel_time();
   // show_random_ring_face(true);
-  show_home_menu();
+  // show_home_menu();
+  show_datetime_picker();
   if (ENABLE_DEEP_SLEEP) {
-    for (int i = 0; i < 20; i++) {
-      delay(500);
-      show_home_menu();
+    for (int i = 0; i < 200; i++) {
+      auto t = millis();
+      while (millis() - t < 100) {
+        if (handle_button_events()) {
+          break;
+        }
+      }
+      // show_home_menu();
+      show_datetime_picker();
     }
+    auto start_time = millis();
     show_random_ring_face(false);
-    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+    auto ring_face_cost = millis() - start_time;
+    Serial.printf("face cost: %ldms\n", ring_face_cost);
+    // esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
     ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(
         BIT(WAKEUP_PIN_UP) | BIT(WAKEUP_PIN_DOWN), DEFAULT_WAKEUP_LEVEL));
+    Serial.printf("boot: %dms, serial: %dus\n", boot_time, serial_cost);
     Serial.println("--- NOW GOING TO SLEEP! ---");
     // esp_deep_sleep_enable_gpio_wakeup();
     esp_deep_sleep_start();

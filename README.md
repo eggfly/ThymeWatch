@@ -47,6 +47,23 @@ ESP32-C3FN4 with 4MB internal QIO Flash
 | ESP32-S3 | Xtensa® dual-core 32-bit LX7 microprocessor | 2 | Up to 240 MHz | 13.2 ~ 91.7 mA | 240 µA | RTC memory and RTC peripherals: 8 µA<br>RTC memory, RTC peripherals are powered down: 7 µA |
 | ESP32-C3 | 32-­bit RISC-­V single-­core processor | 1 | Up to 160 MHz | 13 ~ 23 mA | 130 µA | RTC timer + RTC memory: 5 µA |
 
+## 实际功耗
+Deepsleep: 15.1 µA (通过测试，上下按钮的上拉电阻几乎不额外耗电)
+Wake up: ~ 20 mA
+
+* Serial.begin() 消耗 115 µs
+
+## 关于 RTC Interrupt
+
+* TODO: 接了 RTC Interrupt 后，IO0 内部弱上拉电阻不起作用，IO0电平一直是0，所以后续考虑使用 ESP32 的 RTC 作为闹钟唤醒
+
+## 关于启动速度
+
+* 在 setup() 或者app_main() 函数里使用 millis() 函数来探测第一行代码的消耗时间，消耗时间主要在 esp32 的 bootloader，并且默认app代码分区越大，bootloader验证分区数据完整性所需要的时间越长。
+* 但是！deepsleep后重新唤醒默认是不需要再经过验证的，这块代码可以去看idf的bootloader实现。
+* 测试数据：2MB大程序需要的验证时间大约是200ms+，去掉验证只需要40ms左右。
+* 如果想要第一次也跳过验证，需要加入这一行宏：
+CONFIG_BOOTLOADER_SKIP_VALIDATE_ALWAYS=y
 
 ## 电池电压以及ADC计算公式
 

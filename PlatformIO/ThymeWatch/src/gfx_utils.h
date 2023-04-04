@@ -21,7 +21,7 @@ void drawTextWithAlignment(Adafruit_GFX *gfx, const char *text, int16_t x,
   int16_t out_x, out_y;
   uint16_t out_w, out_h;
   gfx->getTextBounds(text, 0, 0, &out_x, &out_y, &out_w, &out_h);
-  Serial.printf("Bounds: %d %d %d %d\n", out_x, out_y, out_w, out_h);
+  // Serial.printf("Bounds: %d %d %d %d\n", out_x, out_y, out_w, out_h);
   if (horizontal == HORIZONTAL_CENTER && vertical == VERTICAL_MIDDLE) {
     int16_t real_x = x - out_w / 2;
     int16_t real_y = y + out_h / 2;

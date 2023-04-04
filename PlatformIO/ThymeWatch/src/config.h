@@ -6,3 +6,6 @@
 #define WAKEUP_PIN_DOWN      5
 
 #define BUTTON_PIN 9
+#define ENABLE_RTC 1
+
+#define CONFIG_BOOTLOADER_SKIP_VALIDATE_ALWAYS 1

@@ -4,15 +4,19 @@
 #define FORCE_ADJUST_RTC 1
 RTC_PCF8563 rtc;
 
-char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+char daysOfTheWeek[7][12] = {"Sunday",   "Monday", "Tuesday", "Wednesday",
+                             "Thursday", "Friday", "Saturday"};
+
+bool rtc_initialized = false;
 
 void init_rtc() {
-  Wire.begin(21, 20);   // sda=  /scl=
-
-  if (!rtc.begin()) {
+  if (rtc.begin()) {
+    rtc_initialized = true;
+  } else {
     Serial.println("Couldn't find RTC");
     Serial.flush();
-    while (1) delay(10);
+    rtc_initialized = false;
+    return;
   }
 
   if (rtc.lostPower() || FORCE_ADJUST_RTC) {
@@ -68,7 +72,7 @@ void show_datetime() {
   Serial.println("d");
 
   // calculate a date which is 7 days, 12 hours and 30 seconds into the future
-  DateTime future (now + TimeSpan(7, 12, 30, 6));
+  DateTime future(now + TimeSpan(7, 12, 30, 6));
 
   Serial.print(" now + 7d + 12h + 30m + 6s: ");
   Serial.print(future.year(), DEC);
