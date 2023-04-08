@@ -20,13 +20,15 @@
 #include <Adafruit_SharpMem.h>
 
 // any pins can be used
-#define SHARP_SCK  1
-#define SHARP_MOSI 13
-#define SHARP_SS   12
+#define SHARP_SCK  6
+#define SHARP_MOSI 7
+#define SHARP_SS   8
 
+
+#define SHARP_MISO 11
 
 // Set the size and color depth, e.g. 3 bits for LS013B7DH06 (8 colors 128x128 display)
-Adafruit_SharpMem display(&SPI, SHARP_SS, 128, 128, 2000000, 1); // 2100000 ok, 2500000 wrong, 230000 LDO ok
+Adafruit_SharpMem display(&SPI, SHARP_SS, 180, 180, 2000000, 3); // 2100000 ok, 2500000 wrong, 230000 LDO ok
 
 // Set the size of the display here, e.g. 144x168!
 // Adafruit_SharpMem display(SHARP_SCK, SHARP_MOSI, SHARP_SS, 144, 168);
@@ -42,7 +44,7 @@ int minorHalfSize; // 1/2 of lesser of display width or height
 
 void setup(void) {
   Serial.begin(115200);
-  SPI.begin(SHARP_SCK, 11, SHARP_MOSI, SHARP_SS);
+  SPI.begin(SHARP_SCK, SHARP_MISO, SHARP_MOSI, SHARP_SS);
 
   // start & clear the display
   display.begin();

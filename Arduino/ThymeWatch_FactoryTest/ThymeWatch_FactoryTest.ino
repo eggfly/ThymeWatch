@@ -45,10 +45,10 @@
 #include "icons.h"
 #include "color_defs.h"
 
-#define ENABLE_DEEP_SLEEP 1
+#define ENABLE_DEEP_SLEEP 0
 
-#define SCREEN_WIDTH  128
-#define SCREEN_HEIGHT 128
+#define SCREEN_WIDTH  176
+#define SCREEN_HEIGHT 176
 
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP  60        /* Time ESP32 will go to sleep (in seconds) */
