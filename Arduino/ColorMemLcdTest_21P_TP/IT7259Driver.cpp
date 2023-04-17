@@ -356,7 +356,7 @@ void getGesture(byte *responseBuffer, struct TouchPointData *responseData)
 	The same as readFromCommandResponseBuffer just other register to read from
 	Read point information from point information buffer
 */
-void readPointInformation(uint8_t deviceAddress, uint8_t lengthToRead, TouchPointData* dataBuffer)
+void readPointInformation(uint8_t deviceAddress, uint8_t lengthToRead, TouchPointData* pointData)
 {
   writeToCommandBuffer(deviceAddress, true, POINT_INFORMATION_BUFFER);
 
@@ -369,11 +369,11 @@ void readPointInformation(uint8_t deviceAddress, uint8_t lengthToRead, TouchPoin
 
   if (eventType == 0) // Gesture event
   {
-    getGesture(responseBuffer, dataBuffer);
+    getGesture(responseBuffer, pointData);
   }
   else if (eventType == 1) // Touch event
   {
-
+    
   }
   else if (eventType == 2) // Wakeup event
   {
@@ -381,7 +381,10 @@ void readPointInformation(uint8_t deviceAddress, uint8_t lengthToRead, TouchPoin
   }
   else if (eventType == 3) // Point information event
   {
-
+    pointData->xPos = responseBuffer[2] + SCREEN_OFFSET_X;
+    pointData->yPos = responseBuffer[4] + SCREEN_OFFSET_Y;
+    pointData->isNull = false;
+    Serial.printf("%d,%d\n", pointData->xPos, pointData->yPos);
   }
   else // Unknown event
   {

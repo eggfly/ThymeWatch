@@ -28,10 +28,19 @@ void update_tp() {
   }
 }
 
+void IRAM_ATTR isr() {
+  Serial.println("!");
+}
+
+
 void setup(void) {
-  SPI.begin(SCK, SHARP_MISO, MOSI, SS);
-  SPI.setFrequency(3000000);
   Serial.begin(115200);
+  SPI.begin(SCK, SHARP_MISO, MOSI, SS);
+  SPI.setFrequency(6000000);
+
+  pinMode(9, INPUT_PULLUP);
+  attachInterrupt(9, isr, CHANGE);
+
   Serial.println("Hello!");
 
   // tp i2c
@@ -141,18 +150,21 @@ void loop(void) {
 
   color++;
   color %= 8;
-  for (int i = 0; i < 10; i++) {
+  display.fillRect(10, 9, 130, 20, LCD_COLOR_WHITE);
+  for (int i = 0; i < 1; i++) {
     update_tp();
     if (!pointData.isNull) {
-      display.setTextSize(1);
-      display.setTextColor(LCD_COLOR_RED, LCD_COLOR_WHITE);
+      display.setTextSize(2);
+      display.setTextColor(LCD_COLOR_RED);
       display.setCursor(10, 10);
       display.printf("x=%d,y=%d\n", pointData.xPos, pointData.yPos);
+      display.drawFastVLine(pointData.xPos, 0, 176, LCD_COLOR_BLACK);
+      display.drawFastHLine(0, pointData.yPos, 176, LCD_COLOR_BLACK);
       break;
     }
   }
   display.refresh();
-  delay(1);
+  // delay(1);
 }
 
 void testdrawchar(void) {
@@ -244,7 +256,7 @@ void testdrawline() {
     display.refresh();
   }
   delay(150);
-  return;
+  // return;
 
   display.clearDisplay();
   for (uint8_t i = 0; i < display.width(); i += 4) {
