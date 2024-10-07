@@ -65,6 +65,10 @@ Wake up: ~ 20 mA
 * 如果想要第一次也跳过验证，需要加入这一行宏：
 CONFIG_BOOTLOADER_SKIP_VALIDATE_ALWAYS=y
 
+## 续航计算
+
+https://www.digikey.cn/zh/resources/conversion-calculators/conversion-calculator-battery-life
+
 ## 电池电压以及ADC计算公式
 
 ```C++
