@@ -5,12 +5,19 @@
 
 #include "IT7259Driver.h"
 
+// LED ANODE -> 3V3
+
 // any pins can be used
 #define SCK 6
 #define MOSI 7
 #define SS 8
 #define EXTCOMIN 11
 #define DISP 10
+
+#define TP_SDA 2
+#define TP_SCL 3
+#define TP_INT 9
+#define TP_RESET 5
 
 #define SHARP_MISO -1
 
@@ -36,21 +43,21 @@ void IRAM_ATTR isr() {
 void setup(void) {
   Serial.begin(115200);
   SPI.begin(SCK, SHARP_MISO, MOSI, SS);
-  SPI.setFrequency(6000000);
+  SPI.setFrequency(8000000);
 
-  pinMode(9, INPUT_PULLUP);
-  attachInterrupt(9, isr, CHANGE);
+  pinMode(TP_INT, INPUT_PULLUP);
+  attachInterrupt(TP_INT, isr, CHANGE);
 
   Serial.println("Hello!");
 
   // tp i2c
-  Wire.begin(2, 3);   // sda= /scl=
+  Wire.begin(TP_SDA, TP_SCL);   // sda= /scl=
 
   pinMode(DISP, OUTPUT);
   digitalWrite(DISP, HIGH);
 
-  pinMode(5, OUTPUT);
-  digitalWrite(5, HIGH);
+  pinMode(TP_RESET, OUTPUT);
+  digitalWrite(TP_RESET, HIGH);
 
   // start & clear the display
   display.begin();
@@ -164,7 +171,7 @@ void loop(void) {
     }
   }
   display.refresh();
-  // delay(1);
+  delay(100);
 }
 
 void testdrawchar(void) {
