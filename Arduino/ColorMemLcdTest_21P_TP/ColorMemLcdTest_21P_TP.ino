@@ -40,10 +40,27 @@ void IRAM_ATTR isr() {
 }
 
 
+// 定义LEDC通道和GPIO
+const int ledChannel = 0;
+const int ledPin = 4;
+
+// 定义LEDC参数
+const int freq = 5000;        // 频率（Hz）
+const int resolution = 12;    // 分辨率（位），ESP32支持1 - 13位
+const int maxDuty = pow(2, resolution) - 1; // 最大占空比值
+
+
 void setup(void) {
   Serial.begin(115200);
   SPI.begin(SCK, SHARP_MISO, MOSI, SS);
   SPI.setFrequency(8000000);
+
+
+  ledcSetup(ledChannel, freq, resolution);
+
+  // 将LEDC通道绑定到GPIO引脚
+  ledcAttachPin(ledPin, ledChannel);
+
 
   pinMode(TP_INT, INPUT_PULLUP);
   attachInterrupt(TP_INT, isr, CHANGE);
@@ -146,7 +163,29 @@ void setup(void) {
 
 uint16_t color = 0;
 
+size_t fadeTimes = 0;
+size_t frame_count = 0;
+
 void loop(void) {
+  frame_count++;
+  if (frame_count == 20) {
+    frame_count = 0;
+    fadeTimes = 3;
+  }
+  while (fadeTimes > 0) {
+    // 减少亮度（淡出）
+    for (int duty = maxDuty; duty >= 0; duty--) {
+      ledcWrite(ledChannel, duty);
+      delayMicroseconds(200); // 控制淡出速度
+    }
+    // 增加亮度（淡入）
+    for (int duty = 0; duty <= maxDuty; duty++) {
+      ledcWrite(ledChannel, duty);
+      delayMicroseconds(200); // 控制淡入速度
+    }
+    fadeTimes--;
+  }
+
   // Screen must be refreshed at least once per second
   auto x = random(0, 175);
   auto y = random(0, 175);
@@ -171,7 +210,7 @@ void loop(void) {
     }
   }
   display.refresh();
-  delay(100);
+  // delay(100);
 }
 
 void testdrawchar(void) {
