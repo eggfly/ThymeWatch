@@ -11,13 +11,13 @@
 #define SCK 6
 #define MOSI 7
 #define SS 8
-#define EXTCOMIN 11
-#define DISP 10
+#define EXTCOMIN 2
+#define DISP 1
 
-#define TP_SDA 2
-#define TP_SCL 3
-#define TP_INT 9
-#define TP_RESET 5
+#define TP_SDA 21
+#define TP_SCL 20
+#define TP_INT 0
+#define TP_RESET 10
 
 #define SHARP_MISO -1
 
@@ -42,7 +42,7 @@ void IRAM_ATTR isr() {
 
 // 定义LEDC通道和GPIO
 const int ledChannel = 0;
-const int ledPin = 4;
+const int ledPin = 5;
 
 // 定义LEDC参数
 const int freq = 5000;        // 频率（Hz）
@@ -53,7 +53,7 @@ const int maxDuty = pow(2, resolution) - 1; // 最大占空比值
 void setup(void) {
   Serial.begin(115200);
   SPI.begin(SCK, SHARP_MISO, MOSI, SS);
-  SPI.setFrequency(8000000);
+  SPI.setFrequency(4000000); // 8Mhz 容易花屏
 
 
   ledcSetup(ledChannel, freq, resolution);
