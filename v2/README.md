@@ -132,3 +132,4 @@ https://www.digikey.cn/zh/resources/conversion-calculators/conversion-calculator
 * 触摸 TP_RST TP_INT 和唤醒问题测试，RST 置 HIGH 或者置 LOW 分别都会有 INT的多次变化 TODO
 * 逻辑分析仪测下中断时间和信号
 * MicroPython + IDF 混搭代码问题
+* IMU_INT 为啥只能用 ESP_GPIO_WAKEUP_GPIO_HIGH，ESP_GPIO_WAKEUP_GPIO_LOW 会不停地唤醒

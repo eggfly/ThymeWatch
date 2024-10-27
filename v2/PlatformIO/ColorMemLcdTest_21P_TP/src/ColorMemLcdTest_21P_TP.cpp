@@ -8,8 +8,9 @@
 #include "IT7259Driver.h"
 #include <Adafruit_INA219.h>
 
-#define ENABLE_DEEP_SLEEP 0
-#define DEFAULT_WAKEUP_LEVEL ESP_GPIO_WAKEUP_GPIO_LOW
+#define ENABLE_DEEP_SLEEP 1
+#define DEFAULT_WAKEUP_LEVEL ESP_GPIO_WAKEUP_GPIO_HIGH
+#define WAKEUP_IMU_INT 1
 #define WAKEUP_TP_INT 0
 #define WAKEUP_PIN_UP 4
 // #define WAKEUP_PIN_DOWN 9
@@ -278,8 +279,8 @@ void loop(void)
     Serial.println("sleep 500ms ok.");
 
     esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-    // ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(
-    //     BIT(WAKEUP_TP_INT), DEFAULT_WAKEUP_LEVEL));
+    ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(
+        BIT(WAKEUP_IMU_INT), DEFAULT_WAKEUP_LEVEL));
     Serial.println("--- NOW GOING TO SLEEP! ---");
     // esp_deep_sleep_enable_gpio_wakeup();
     esp_deep_sleep_start();
