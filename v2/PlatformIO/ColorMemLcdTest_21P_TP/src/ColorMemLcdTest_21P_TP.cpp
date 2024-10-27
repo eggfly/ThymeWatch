@@ -110,7 +110,7 @@ void setup(void)
   Serial.begin(115200);
   delay(1000);
   SPI.begin(SCK, SHARP_MISO, MOSI, SS);
-  SPI.setFrequency(4000000); // 8Mhz 容易花屏
+  SPI.setFrequency(6000000); // 8Mhz 容易花屏
 
   ledcSetup(ledChannel, freq, resolution);
 
@@ -267,6 +267,7 @@ void fadeOutAndIn()
   }
 }
 
+long cost;
 void loop(void)
 {
   if (ENABLE_DEEP_SLEEP)
@@ -307,7 +308,7 @@ void loop(void)
 
   color++;
   color %= 8;
-  display.fillRect(10, 9, 130, 20, LCD_COLOR_WHITE);
+  display.fillRect(10, 9, 130, 40, LCD_COLOR_WHITE);
   for (int i = 0; i < 1; i++)
   {
     update_tp();
@@ -322,7 +323,14 @@ void loop(void)
       break;
     }
   }
+  display.setTextSize(2);
+  display.setTextColor(LCD_COLOR_RED);
+  display.setCursor(10, 30);
+  display.printf("cost:%ldms", cost);
+  auto t = millis();
   display.refresh();
+  // delay(10);
+  cost = millis() - t;
   // delay(100);
 }
 

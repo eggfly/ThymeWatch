@@ -222,18 +222,20 @@ void ColorMemLCD::sendLineCommand( char* line_cmd, int line  )
     sendbyte( LCD_COLOR_CMD_UPDATE | ( polarity << 6 ) ); // Command
     TOGGLE_VCOM;
     sendbyte( line + 1 );             // line
-
-    for( j = 0 ; j < (LCD_DISP_WIDTH/2) ; j++ ) {
-        if( j >= (LCD_DEVICE_WIDTH/2) ) {
-            /* out of device size */
-            break;
-        }
-        sendbyte(line_cmd[j]);        // data
-    }
-    for( ; j < (LCD_DEVICE_WIDTH/2) ; j++ ) {
-        /* padding to device size */
-        sendbyteLSB( 0x00 );
-    }
+    SPI.beginTransaction(SPISettings(6000000, MSBFIRST, SPI_MODE0));
+    sendBytes( (uint8_t*)line_cmd, (LCD_DISP_WIDTH/2) );
+    SPI.endTransaction();
+    // for( j = 0 ; j < (LCD_DISP_WIDTH/2) ; j++ ) {
+    //     if( j >= (LCD_DEVICE_WIDTH/2) ) {
+    //         /* out of device size */
+    //         break;
+    //     }
+    //     sendbyte(line_cmd[j]);        // data
+    // }
+    // for( ; j < (LCD_DEVICE_WIDTH/2) ; j++ ) {
+    //     /* padding to device size */
+    //     sendbyteLSB( 0x00 );
+    // }
 
     sendbyteLSB( 0x00 );
     sendbyteLSB( 0x00 );
@@ -280,7 +282,9 @@ void ColorMemLCD::setBlinkMode( char mode )
 /* PRIVATE METHODS */
 /* *************** */
 
- 
+ inline void ColorMemLCD::sendBytes(uint8_t* data, uint16_t len){
+    SPI.transfer(data, len);
+ }
 /**************************************************************************/
 /*!
     @brief  Sends a single byte in (pseudo)-SPI.
