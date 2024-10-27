@@ -17,8 +17,9 @@ void setup()
   if (digitalRead(IO4_PIN) == LOW)
   {
     delay(3000);
-    Serial.println("----------------- 哈哈，想不用飞线了，一定要用我这段代码 -----------------");
-    Serial.println("IO4 is LOW, will restart and force to download mode...");
+    // Serial.println("----------------- 哈哈，想不用飞线了，一定要用我这段代码 -----------------");
+    Serial.println("**** IO4 is LOW, will restart and force to download mode...");
+    Serial.flush();
     REG_WRITE(RTC_CNTL_OPTION1_REG, RTC_CNTL_FORCE_DOWNLOAD_BOOT_V);
     esp_restart();
   }

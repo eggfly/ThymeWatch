@@ -1,18 +1,27 @@
 
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
+#include <esp_sleep.h>
+
 #include "ColorMemLCD.h"
 
 #include "IT7259Driver.h"
+#include <Adafruit_INA219.h>
 
-// LED ANODE -> 3V3
+#define ENABLE_DEEP_SLEEP 1
+#define DEFAULT_WAKEUP_LEVEL ESP_GPIO_WAKEUP_GPIO_LOW
+#define WAKEUP_PIN_UP 4
+#define WAKEUP_PIN_DOWN 9
+
+// LED ANODE -> IO5
+
+Adafruit_INA219 ina219;
 
 // any pins can be used
 #define SCK 6
 #define MOSI 7
 #define SS 8
 #define EXTCOMIN 2
-#define DISP 1
 
 #define TP_SDA 21
 #define TP_SCL 20
@@ -37,39 +46,71 @@ ColorMemLCD display(SCK, MOSI, SS, EXTCOMIN);
 
 struct TouchPointData pointData;
 
-void update_tp() {
+void update_tp()
+{
   readTouchEvent(&pointData);
-  if (!pointData.isNull) {
+  if (!pointData.isNull)
+  {
     Serial.printf("x=%d,y=%d\n", pointData.xPos, pointData.yPos);
   }
 }
 
-void IRAM_ATTR isr() {
+void IRAM_ATTR isr()
+{
   Serial.println("!");
 }
-
 
 // 定义LEDC通道和GPIO
 const int ledChannel = 0;
 const int ledPin = 5;
 
 // 定义LEDC参数
-const int freq = 5000;        // 频率（Hz）
-const int resolution = 12;    // 分辨率（位），ESP32支持1 - 13位
+const int freq = 5000;                      // 频率（Hz）
+const int resolution = 12;                  // 分辨率（位），ESP32支持1 - 13位
 const int maxDuty = pow(2, resolution) - 1; // 最大占空比值
 
+void loop_ina219()
+{
+  float shuntvoltage = 0;
+  float busvoltage = 0;
+  float current_mA = 0;
+  float loadvoltage = 0;
+  float power_mW = 0;
 
-void setup(void) {
+  shuntvoltage = ina219.getShuntVoltage_mV();
+  busvoltage = ina219.getBusVoltage_V();
+  current_mA = ina219.getCurrent_mA();
+  power_mW = ina219.getPower_mW();
+  loadvoltage = busvoltage + (shuntvoltage / 1000);
+
+  Serial.print("Bus Voltage:   ");
+  Serial.print(busvoltage);
+  Serial.println(" V");
+  Serial.print("Shunt Voltage: ");
+  Serial.print(shuntvoltage);
+  Serial.println(" mV");
+  Serial.print("Load Voltage:  ");
+  Serial.print(loadvoltage);
+  Serial.println(" V");
+  Serial.print("Current:       ");
+  Serial.print(current_mA);
+  Serial.println(" mA");
+  Serial.print("Power:         ");
+  Serial.print(power_mW);
+  Serial.println(" mW");
+  Serial.println("");
+}
+
+void setup(void)
+{
   Serial.begin(115200);
   SPI.begin(SCK, SHARP_MISO, MOSI, SS);
   SPI.setFrequency(4000000); // 8Mhz 容易花屏
-
 
   ledcSetup(ledChannel, freq, resolution);
 
   // 将LEDC通道绑定到GPIO引脚
   ledcAttachPin(ledPin, ledChannel);
-
 
   pinMode(TP_INT, INPUT_PULLUP);
   attachInterrupt(TP_INT, isr, CHANGE);
@@ -77,10 +118,7 @@ void setup(void) {
   Serial.println("Hello!");
 
   // tp i2c
-  Wire.begin(TP_SDA, TP_SCL);   // sda= /scl=
-
-  pinMode(DISP, OUTPUT);
-  digitalWrite(DISP, HIGH);
+  Wire.begin(TP_SDA, TP_SCL); // sda= /scl=
 
   pinMode(TP_RESET, OUTPUT);
   digitalWrite(TP_RESET, HIGH);
@@ -89,6 +127,35 @@ void setup(void) {
   display.begin();
   display.clearDisplay();
 
+  display.setTextSize(3);
+  display.setTextColor(LCD_COLOR_RED);
+  display.setCursor(0, 0);
+  display.println("Wake UP!");
+  display.refresh();
+
+  for (int i = 0; i < 3; i++)
+  {
+    testdrawtriangle();
+  }
+
+  if (!ina219.begin())
+  {
+    Serial.println("Failed to find INA219 chip");
+    while (1)
+    {
+      delay(10);
+    }
+  }
+  loop_ina219();
+  ina219.powerSave(true);
+
+  display.setTextSize(3);
+  display.setTextColor(LCD_COLOR_MAGENTA);
+  display.setCursor(0, 128);
+  display.println("Now SLEEP..");
+  display.refresh();
+
+  // TODO eggfly mod
   return;
 
   // draw a single pixel
@@ -102,7 +169,6 @@ void setup(void) {
   display.refresh();
   delay(500);
   display.clearDisplay();
-
 
   display.refresh();
   // draw many lines
@@ -162,7 +228,8 @@ void setup(void) {
   display.println(3.141592);
   display.setTextSize(2);
   display.setTextColor(LCD_COLOR_YELLOW);
-  display.print("0x"); display.println(0xDEADBEEF, HEX);
+  display.print("0x");
+  display.println(0xDEADBEEF, HEX);
   display.refresh();
   delay(1000);
 }
@@ -175,20 +242,38 @@ uint16_t color = 0;
 size_t fadeTimes = 0;
 size_t frame_count = 0;
 
-void loop(void) {
+#define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP 10       /* Time ESP32 will go to sleep (in seconds) */
+
+void loop(void)
+{
+  if (ENABLE_DEEP_SLEEP)
+  {
+    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+    ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(
+        BIT(WAKEUP_PIN_UP) | BIT(WAKEUP_PIN_UP), DEFAULT_WAKEUP_LEVEL));
+    Serial.println("--- NOW GOING TO SLEEP! ---");
+    // esp_deep_sleep_enable_gpio_wakeup();
+    esp_deep_sleep_start();
+  }
+
   frame_count++;
-  if (frame_count == 20) {
+  if (frame_count == 20)
+  {
     frame_count = 0;
     fadeTimes = 3;
   }
-  while (fadeTimes > 0) {
+  while (fadeTimes > 0)
+  {
     // 减少亮度（淡出）
-    for (int duty = maxDuty; duty >= 0; duty--) {
+    for (int duty = maxDuty; duty >= 0; duty--)
+    {
       ledcWrite(ledChannel, duty);
       delayMicroseconds(200); // 控制淡出速度
     }
     // 增加亮度（淡入）
-    for (int duty = 0; duty <= maxDuty; duty++) {
+    for (int duty = 0; duty <= maxDuty; duty++)
+    {
       ledcWrite(ledChannel, duty);
       delayMicroseconds(200); // 控制淡入速度
     }
@@ -206,9 +291,11 @@ void loop(void) {
   color++;
   color %= 8;
   display.fillRect(10, 9, 130, 20, LCD_COLOR_WHITE);
-  for (int i = 0; i < 1; i++) {
+  for (int i = 0; i < 1; i++)
+  {
     update_tp();
-    if (!pointData.isNull) {
+    if (!pointData.isNull)
+    {
       display.setTextSize(2);
       display.setTextColor(LCD_COLOR_RED);
       display.setCursor(10, 10);
@@ -222,30 +309,37 @@ void loop(void) {
   // delay(100);
 }
 
-void testdrawchar(void) {
+void testdrawchar(void)
+{
   display.setTextSize(1);
   display.setTextColor(LCD_COLOR_BLUE);
   display.setCursor(0, 0);
 
-  for (uint8_t i = 0; i < 168; i++) {
-    if (i == '\n') continue;
+  for (uint8_t i = 0; i < 168; i++)
+  {
+    if (i == '\n')
+      continue;
     display.write(i);
-    //if ((i > 0) && (i % 14 == 0))
-    //display.println();
+    // if ((i > 0) && (i % 14 == 0))
+    // display.println();
   }
   display.refresh();
 }
 
-void testdrawcircle(void) {
-  for (uint8_t i = 0; i < display.height(); i += 2) {
+void testdrawcircle(void)
+{
+  for (uint8_t i = 0; i < display.height(); i += 2)
+  {
     display.drawCircle(display.width() / 2 - 5, display.height() / 2 - 5, i, BLACK);
     display.refresh();
   }
 }
 
-void testfillrect(void) {
+void testfillrect(void)
+{
   uint8_t color = 1;
-  for (uint8_t i = 0; i < display.height() / 2; i += 3) {
+  for (uint8_t i = 0; i < display.height() / 2; i += 3)
+  {
     // alternate colors
     display.fillRect(i, i, display.width() - i * 2, display.height() - i * 2, color % 2);
     display.refresh();
@@ -253,8 +347,10 @@ void testfillrect(void) {
   }
 }
 
-void testdrawtriangle(void) {
-  for (uint16_t i = 0; i < min(display.width(), display.height()) / 2; i += 5) {
+void testdrawtriangle(void)
+{
+  for (uint16_t i = 0; i < min(display.width(), display.height()) / 2; i += 5)
+  {
     display.drawTriangle(display.width() / 2, display.height() / 2 - i,
                          display.width() / 2 - i, display.height() / 2 + i,
                          display.width() / 2 + i, display.height() / 2 + i, BLACK);
@@ -262,51 +358,66 @@ void testdrawtriangle(void) {
   }
 }
 
-void testfilltriangle(void) {
+void testfilltriangle(void)
+{
   uint8_t color = BLACK;
-  for (int16_t i = min(display.width(), display.height()) / 2; i > 0; i -= 5) {
+  for (int16_t i = min(display.width(), display.height()) / 2; i > 0; i -= 5)
+  {
     display.fillTriangle(display.width() / 2, display.height() / 2 - i,
                          display.width() / 2 - i, display.height() / 2 + i,
                          display.width() / 2 + i, display.height() / 2 + i, color);
-    if (color == WHITE) color = BLACK;
-    else color = WHITE;
+    if (color == WHITE)
+      color = BLACK;
+    else
+      color = WHITE;
     display.refresh();
   }
 }
 
-void testdrawroundrect(void) {
-  for (uint8_t i = 0; i < display.height() / 4; i += 2) {
+void testdrawroundrect(void)
+{
+  for (uint8_t i = 0; i < display.height() / 4; i += 2)
+  {
     display.drawRoundRect(i, i, display.width() - 2 * i, display.height() - 2 * i, display.height() / 4, BLACK);
     display.refresh();
   }
 }
 
-void testfillroundrect(void) {
+void testfillroundrect(void)
+{
   uint8_t color = BLACK;
-  for (uint8_t i = 0; i < display.height() / 4; i += 2) {
+  for (uint8_t i = 0; i < display.height() / 4; i += 2)
+  {
     display.fillRoundRect(i, i, display.width() - 2 * i, display.height() - 2 * i, display.height() / 4, color);
-    if (color == WHITE) color = BLACK;
-    else color = WHITE;
+    if (color == WHITE)
+      color = BLACK;
+    else
+      color = WHITE;
     display.refresh();
   }
 }
 
-void testdrawrect(void) {
-  for (uint8_t i = 0; i < display.height() / 2; i += 2) {
+void testdrawrect(void)
+{
+  for (uint8_t i = 0; i < display.height() / 2; i += 2)
+  {
     display.drawRect(i, i, display.width() - 2 * i, display.height() - 2 * i, BLACK);
     display.refresh();
   }
 }
 
-void testdrawline() {
-  //display.setTextColor(LCD_COLOR_RED);
-  for (uint8_t i = 0; i < display.width(); i += 4) {
+void testdrawline()
+{
+  // display.setTextColor(LCD_COLOR_RED);
+  for (uint8_t i = 0; i < display.width(); i += 4)
+  {
     display.drawLine(0, 0, i, display.height() - 1, LCD_COLOR_RED);
     display.refresh();
   }
   // ;
-  //display.setTextColor(LCD_COLOR_MAGENTA);
-  for (uint8_t i = 0; i < display.height(); i += 4) {
+  // display.setTextColor(LCD_COLOR_MAGENTA);
+  for (uint8_t i = 0; i < display.height(); i += 4)
+  {
     display.drawLine(0, 0, display.width() - 1, i, LCD_COLOR_MAGENTA);
     display.refresh();
   }
@@ -314,33 +425,39 @@ void testdrawline() {
   // return;
 
   display.clearDisplay();
-  for (uint8_t i = 0; i < display.width(); i += 4) {
+  for (uint8_t i = 0; i < display.width(); i += 4)
+  {
     display.drawLine(0, display.height() - 1, i, 0, BLACK);
     display.refresh();
   }
-  for (int8_t i = display.height() - 1; i >= 0; i -= 4) {
+  for (int8_t i = display.height() - 1; i >= 0; i -= 4)
+  {
     display.drawLine(0, display.height() - 1, display.width() - 1, i, LCD_COLOR_YELLOW);
     display.refresh();
   }
   delay(150);
 
   display.clearDisplay();
-  for (int8_t i = display.width() - 1; i >= 0; i -= 4) {
+  for (int8_t i = display.width() - 1; i >= 0; i -= 4)
+  {
     display.drawLine(display.width() - 1, display.height() - 1, i, 0, LCD_COLOR_GREEN);
     display.refresh();
   }
-  for (int8_t i = display.height() - 1; i >= 0; i -= 4) {
+  for (int8_t i = display.height() - 1; i >= 0; i -= 4)
+  {
     display.drawLine(display.width() - 1, display.height() - 1, 0, i, BLACK);
     display.refresh();
   }
   delay(150);
 
   display.clearDisplay();
-  for (uint8_t i = 0; i < display.height(); i += 4) {
+  for (uint8_t i = 0; i < display.height(); i += 4)
+  {
     display.drawLine(display.width() - 1, 0, 0, i, BLACK);
     display.refresh();
   }
-  for (uint8_t i = 0; i < display.width(); i += 4) {
+  for (uint8_t i = 0; i < display.width(); i += 4)
+  {
     display.drawLine(display.width() - 1, 0, i, display.height() - 1, BLACK);
     display.refresh();
   }

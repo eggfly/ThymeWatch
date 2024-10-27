@@ -1,0 +1,39 @@
+#include <Arduino.h>
+// ESP32-C3 蜂鸣器和弦模拟
+// 将蜂鸣器连接到 GPIO3
+
+const int buzzerPin = 3;
+
+// do、mi、so 的频率（C、E、G 音符）
+const int noteDo = 262;  // C4
+const int noteMi = 330;  // E4
+const int noteSo = 392;  // G4
+
+// 音调频率数组
+int notes[] = {noteDo, noteMi, noteSo};
+int numNotes = sizeof(notes) / sizeof(notes[0]);
+
+void setup() {
+  Serial.begin(115200);
+  // 初始化蜂鸣器引脚
+  pinMode(buzzerPin, OUTPUT);
+}
+
+void playChord(int *frequencies, int length, int duration);
+
+void loop() {
+  playChord(notes, numNotes, 2000);  // 播放和弦 2 秒
+  Serial.println("Play chord");
+  delay(1000);                       // 等待 1 秒
+}
+
+void playChord(int *frequencies, int length, int duration) {
+  unsigned long startTime = millis();
+  while (millis() - startTime < duration) {
+    for (int i = 0; i < length; i++) {
+      tone(buzzerPin, frequencies[i], 1);  // 播放每个音调 1 毫秒
+      noTone(buzzerPin);                    // 停止音调
+      delayMicroseconds(1);
+    }
+  }
+}
