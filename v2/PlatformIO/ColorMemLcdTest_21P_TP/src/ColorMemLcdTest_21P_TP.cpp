@@ -13,6 +13,9 @@
 #define WAKEUP_PIN_UP 4
 #define WAKEUP_PIN_DOWN 9
 
+#define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP 10       /* Time ESP32 will go to sleep (in seconds) */
+
 // LED ANODE -> IO5
 
 Adafruit_INA219 ina219;
@@ -141,13 +144,13 @@ void setup(void)
   if (!ina219.begin())
   {
     Serial.println("Failed to find INA219 chip");
-    while (1)
-    {
-      delay(10);
-    }
   }
-  loop_ina219();
-  ina219.powerSave(true);
+  else
+  {
+    Serial.println("Found INA219 chip");
+    loop_ina219();
+    ina219.powerSave(true);
+  }
 
   display.setTextSize(3);
   display.setTextColor(LCD_COLOR_MAGENTA);
@@ -241,9 +244,6 @@ uint16_t color = 0;
 
 size_t fadeTimes = 0;
 size_t frame_count = 0;
-
-#define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP 10       /* Time ESP32 will go to sleep (in seconds) */
 
 void loop(void)
 {

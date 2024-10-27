@@ -77,7 +77,32 @@ ESP32-C3 Smart Watch with JDI 8-Color Memory Display
 | ESP32-C3 | 32-­bit RISC-­V single-­core processor | 1 | Up to 160 MHz | 13 ~ 23 mA | 130 µA | RTC timer + RTC memory: 5 µA |
 
 ## 实际功耗
-Deepsleep: 15.1 µA (通过测试，上下按钮的上拉电阻几乎不额外耗电，因为高阻态)
+
+V2: 排查过程:
+
+带SPI 30.1mA
+不刷屏只有delay() 只有 18.14mA
+
+
+带屏幕 1.40 mA
+不带屏幕 1.38 mA（可能触摸IC？）
+
+INA219 写入 power save mode后，0.43到0.38mA 左右
+
+VDD_SPI 1.393V
+
+休眠SDA竟然不是3.3V，是1.4V？？
+
+咔嚓掉DS3231MZ+的VCC后：300.1mA，SDA 上升到 2.401V了
+咔嚓了DS3231MZ+的SDA，SCL后，SDA电压还是2.4V
+咔嚓掉 OPT3001后，休眠 263uA 了，但是电压还是2.4V，后来又282uA
+咔嚓掉BMP280，没带屏幕的情况下，14-19微安！（SDA从不休眠3.283V->到休眠3.243V）
+
+带触摸屏：24.5 微安，比 v1 的 15.1µA 略高
+
+
+
+老 V1: Deepsleep: 15.1 µA (通过测试，上下按钮的上拉电阻几乎不额外耗电，因为高阻态)
 Wake up: ~ 20 mA
 
 * Serial.begin() 消耗 115 µs
