@@ -46,6 +46,11 @@ A. Jordan 2018.
 #define LCD_COLOR_CMD_INVERSION         (0x14) //!< Display Inversion Mode
 
 
+#define TOGGLE_VCOM           \
+  do {                        \
+    polarity = !polarity;     \
+  } while (0);
+
 /* ************* */
 /* CONSTRUCTORS  */
 /* ************* */
@@ -71,8 +76,8 @@ _extcomin= extcomin;
 	
 	 polarity = 0;
     blink_cmd = 0x00;
-	extcomin_stat = 0;
-digitalWrite(_extcomin, extcomin_stat);  
+	// extcomin_stat = 0;
+  // digitalWrite(_extcomin, extcomin_stat);  
     /* set default color */
     //foreground( LCD_COLOR_WHITE );
     //background( LCD_COLOR_BLACK );
@@ -172,7 +177,6 @@ void ColorMemLCD::refresh()
 {
     int32_t         i;
     int    copy_width;
-//TOGGLE_VCOM;
     if( window_x + window_w < LCD_DISP_WIDTH ) {
         copy_width = (window_w / 2);
     }
@@ -190,14 +194,14 @@ void ColorMemLCD::refresh()
         /* initialize command buffer */
         memset( &cmd_buf[0], (char)( (_background & 0x0F ) | ( (_background & 0x0F ) << 4 ) ), sizeof(cmd_buf) );
 
-        /* copy to command bufffer */
+        /* copy to command buffer */
         memcpy( &cmd_buf[(window_x/2)], &disp_buf[ (window_w / 2) * i ], copy_width );
 
         /* send cmaoond request */
         sendLineCommand( &cmd_buf[0], window_y + i );
     }
-	extcomin_stat=!extcomin_stat;
-	digitalWrite(_extcomin, extcomin_stat); //toggle extcomin
+	// extcomin_stat=!extcomin_stat;
+	// digitalWrite(_extcomin, extcomin_stat); //toggle extcomin
 }
 
 
@@ -216,6 +220,7 @@ void ColorMemLCD::sendLineCommand( char* line_cmd, int line  )
     digitalWrite(_ss, HIGH);
     delayMicroseconds(6);
     sendbyte( LCD_COLOR_CMD_UPDATE | ( polarity << 6 ) ); // Command
+    TOGGLE_VCOM;
     sendbyte( line + 1 );             // line
 
     for( j = 0 ; j < (LCD_DISP_WIDTH/2) ; j++ ) {
@@ -266,6 +271,7 @@ void ColorMemLCD::setBlinkMode( char mode )
     digitalWrite(_ss, HIGH);
    delayMicroseconds(6);
     sendbyte( blink_cmd | ( polarity << 6 ));
+    TOGGLE_VCOM;
     sendbyteLSB( 0x00 );
    delayMicroseconds(6);
     digitalWrite(_ss, LOW);
@@ -280,7 +286,7 @@ void ColorMemLCD::setBlinkMode( char mode )
     @brief  Sends a single byte in (pseudo)-SPI.
 */
 /**************************************************************************/
-void ColorMemLCD::sendbyte(uint8_t data) 
+inline void ColorMemLCD::sendbyte(uint8_t data) 
 {
 #ifdef __AVR__
   uint8_t i = 0;
@@ -365,10 +371,10 @@ void ColorMemLCD::clearDisplay()
   delayMicroseconds(6);
   //sendbyte(_sharpmem_vcom | SHARPMEM_BIT_CLEAR);
   sendbyte( LCD_COLOR_CMD_ALL_CLEAR | ( polarity << 6 ));
+  TOGGLE_VCOM;
   sendbyteLSB(0x00);
-  //TOGGLE_VCOM;
-  extcomin_stat=!extcomin_stat;
-  digitalWrite(_extcomin, extcomin_stat); //toggle extcomin
+  // extcomin_stat=!extcomin_stat;
+  // digitalWrite(_extcomin, extcomin_stat); //toggle extcomin
   delayMicroseconds(6);
   digitalWrite(_ss, LOW);
   

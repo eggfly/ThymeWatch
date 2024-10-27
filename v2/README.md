@@ -122,3 +122,13 @@ CONFIG_BOOTLOADER_SKIP_VALIDATE_ALWAYS=y
 ## 续航计算
 
 https://www.digikey.cn/zh/resources/conversion-calculators/conversion-calculator-battery-life
+
+
+## Rev1 存在问题和 TODO LIST
+* PCB难放进外壳
+* 磁吸需要往上移动，重新测量并缩小外壳上磁吸的尺寸
+* 螺丝重新弄小孔，并螺在3D模型柱预留小1mm的大小
+* BMP280 拉低SDA，SCL问题
+* 触摸 TP_RST TP_INT 和唤醒问题测试，RST 置 HIGH 或者置 LOW 分别都会有 INT的多次变化 TODO
+* 逻辑分析仪测下中断时间和信号
+* MicroPython + IDF 混搭代码问题

@@ -8,10 +8,11 @@
 #include "IT7259Driver.h"
 #include <Adafruit_INA219.h>
 
-#define ENABLE_DEEP_SLEEP 1
+#define ENABLE_DEEP_SLEEP 0
 #define DEFAULT_WAKEUP_LEVEL ESP_GPIO_WAKEUP_GPIO_LOW
+#define WAKEUP_TP_INT 0
 #define WAKEUP_PIN_UP 4
-#define WAKEUP_PIN_DOWN 9
+// #define WAKEUP_PIN_DOWN 9
 
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP 10       /* Time ESP32 will go to sleep (in seconds) */
@@ -58,9 +59,9 @@ void update_tp()
   }
 }
 
-void IRAM_ATTR isr()
+void IRAM_ATTR tp_int_isr()
 {
-  Serial.println("!");
+  digitalRead(TP_INT) == HIGH ? Serial.println("H!") : Serial.println("L!");
 }
 
 // 定义LEDC通道和GPIO
@@ -107,6 +108,7 @@ void loop_ina219()
 void setup(void)
 {
   Serial.begin(115200);
+  delay(1000);
   SPI.begin(SCK, SHARP_MISO, MOSI, SS);
   SPI.setFrequency(4000000); // 8Mhz 容易花屏
 
@@ -114,9 +116,10 @@ void setup(void)
 
   // 将LEDC通道绑定到GPIO引脚
   ledcAttachPin(ledPin, ledChannel);
+  ledcWrite(ledChannel, maxDuty);
 
   pinMode(TP_INT, INPUT_PULLUP);
-  attachInterrupt(TP_INT, isr, CHANGE);
+  attachInterrupt(TP_INT, tp_int_isr, CHANGE);
 
   Serial.println("Hello!");
 
@@ -136,9 +139,12 @@ void setup(void)
   display.println("Wake UP!");
   display.refresh();
 
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < 1; i++)
   {
     testdrawtriangle();
+    display.refresh();
+    testdrawchar();
+    display.refresh();
   }
 
   if (!ina219.begin())
@@ -245,13 +251,34 @@ uint16_t color = 0;
 size_t fadeTimes = 0;
 size_t frame_count = 0;
 
+void fadeOutAndIn()
+{
+  // 减少亮度（淡出）
+  for (int duty = maxDuty; duty >= 0; duty--)
+  {
+    ledcWrite(ledChannel, duty);
+    delayMicroseconds(200); // 控制淡出速度
+  }
+  // 增加亮度（淡入）
+  for (int duty = 0; duty <= maxDuty; duty++)
+  {
+    ledcWrite(ledChannel, duty);
+    delayMicroseconds(200); // 控制淡入速度
+  }
+}
+
 void loop(void)
 {
   if (ENABLE_DEEP_SLEEP)
   {
+    Serial.println("set reset tp to low");
+    digitalWrite(TP_RESET, LOW);
+    delay(500);
+    Serial.println("sleep 500ms ok.");
+
     esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-    ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(
-        BIT(WAKEUP_PIN_UP) | BIT(WAKEUP_PIN_UP), DEFAULT_WAKEUP_LEVEL));
+    // ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(
+    //     BIT(WAKEUP_TP_INT), DEFAULT_WAKEUP_LEVEL));
     Serial.println("--- NOW GOING TO SLEEP! ---");
     // esp_deep_sleep_enable_gpio_wakeup();
     esp_deep_sleep_start();
@@ -263,22 +290,12 @@ void loop(void)
     frame_count = 0;
     fadeTimes = 3;
   }
-  while (fadeTimes > 0)
-  {
-    // 减少亮度（淡出）
-    for (int duty = maxDuty; duty >= 0; duty--)
-    {
-      ledcWrite(ledChannel, duty);
-      delayMicroseconds(200); // 控制淡出速度
-    }
-    // 增加亮度（淡入）
-    for (int duty = 0; duty <= maxDuty; duty++)
-    {
-      ledcWrite(ledChannel, duty);
-      delayMicroseconds(200); // 控制淡入速度
-    }
-    fadeTimes--;
-  }
+  // Uncomment the following line to enable fading
+  // while (fadeTimes > 0)
+  // {
+  //   fadeOutAndIn();
+  //   fadeTimes--;
+  // }
 
   // Screen must be refreshed at least once per second
   auto x = random(0, 175);
