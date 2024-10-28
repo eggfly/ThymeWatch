@@ -1,6 +1,57 @@
 # ThymeWatchColor
 ESP32-C3 Smart Watch with JDI 8-Color Memory Display
 
+
+```mermaid
+graph LR
+    subgraph ESP32_C3[ESP32-C3 with 16MB Flash]
+        direction TB
+        Bootloader[魔改 2nd stage bootloader]
+        Bootloader --> |判断IO引脚| Firmware
+
+        subgraph Firmware[固件分区]
+            direction LR
+            MicroPython[MicroPython 固件分区]
+            Arduino[Arduino C++ 固件分区]
+            SharedFS[共享分区<br>文件系统]
+        end
+
+        Bootloader --> Firmware
+
+        Arduino --> |每分钟唤醒| DeepSleep[DeepSleep]
+        Arduino --> |I2C获取时间| RTC
+
+        Arduino --> ChronoScript[C++实现的<br/>ChronoScript解释器]
+        ChronoScript --> AdafruitGFX[Adafruit_GFX库]
+        AdafruitGFX --> Display[Memory LCD 显示屏]
+
+        SharedFS[共享文件分区<br>LittleFS v2]
+        MicroPython --> |共享脚本和资源文件| SharedFS
+        SharedFS --> |读取脚本| ChronoScript
+
+        OTA[OTA 更新功能]
+        OTA --> |更新MicroPython固件| MicroPython
+        OTA --> |更新Arduino固件| Arduino
+    end
+
+    RTC[RTC模块]
+
+    MicroPython --> |下载和配置表盘| SharedFS
+
+    %% Style Customizations
+    style Bootloader fill:#B0C4DE,stroke:#1E3C72,stroke-width:1.5px,color:#1E3C72
+    style Firmware fill:#F8F9FA,stroke:#1E3C72,stroke-width:1.5px
+    style MicroPython fill:#FFD1DC,stroke:#C41E3A,stroke-width:1.5px,color:#C41E3A
+    style Arduino fill:#C1E1C1,stroke:#228B22,stroke-width:1.5px,color:#228B22
+    style SharedFS fill:#FFF5BA,stroke:#E6A800,stroke-width:1.5px,color:#E6A800
+    style ChronoScript fill:#FFFACD,stroke:#FFD700,stroke-width:1.5px,color:#00C7CC
+    style AdafruitGFX fill:#FFE4B5,stroke:#CD853F,stroke-width:1.5px,color:#CD853F
+    style OTA fill:#ADD8E6,stroke:#4169E1,stroke-width:1.5px,color:#4169E1
+    style DeepSleep fill:#E0FFFF,stroke:#008B8B,stroke-width:1.5px,color:#008B8B
+    style RTC fill:#E6E6FA,stroke:#9370DB,stroke-width:1.5px,color:#9370DB
+    style Display fill:#FFEFD5,stroke:#D2691E,stroke-width:1.5px,color:#D2691E
+    style ESP32_C3 fill:#FFEFE5,color:#333333
+```
 ![PCB](docs/ThymeWatchColor.jpg)
 
 
