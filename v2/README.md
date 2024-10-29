@@ -2,6 +2,9 @@
 ESP32-C3 Smart Watch with JDI 8-Color Memory Display
 
 
+> <img src="images/doge.png" width="16" alt="doge"/> From Linus: <br>
+> **This is a really cool and awesome watch project!**
+
 ```mermaid
 graph LR
     subgraph ESP32_C3[ESP32-C3 with 16MB Flash]
