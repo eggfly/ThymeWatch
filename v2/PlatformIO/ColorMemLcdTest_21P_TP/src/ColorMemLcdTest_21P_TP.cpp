@@ -7,8 +7,10 @@
 
 #include "IT7259Driver.h"
 #include <Adafruit_INA219.h>
+#include "face1.h"
+#include "calendar_data.h"
 
-#define ENABLE_DEEP_SLEEP 1
+#define ENABLE_DEEP_SLEEP 0
 #define DEFAULT_WAKEUP_LEVEL ESP_GPIO_WAKEUP_GPIO_HIGH
 #define WAKEUP_IMU_INT 1
 #define WAKEUP_TP_INT 0
@@ -164,6 +166,14 @@ void setup(void)
   display.setCursor(0, 128);
   display.println("Now SLEEP..");
   display.refresh();
+
+  display.drawRGBBitmap(0, 0, image_data, 176, 176);
+  display.refresh();
+  delay(5000);
+
+  display.drawRGBBitmap(0, 0, calendar_img, 176, 176);
+  display.refresh();
+  delay(5000);
 
   // TODO eggfly mod
   return;
