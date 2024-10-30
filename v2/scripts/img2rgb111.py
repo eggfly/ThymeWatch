@@ -3,7 +3,7 @@ from PIL import Image
 
 def main():
     # 读取源图像
-    src_image = Image.open('calendar.png').convert('RGB')
+    src_image = Image.open('20150031.png').convert('RGB')
     src_width, src_height = src_image.size
 
     # 创建目标图像（176x176）并填充黑色

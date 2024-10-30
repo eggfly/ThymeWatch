@@ -7,8 +7,10 @@
 
 #include "IT7259Driver.h"
 #include <Adafruit_INA219.h>
-#include "face1.h"
+// #include "face1.h"
 #include "calendar_data.h"
+#include "20150031.h"
+#include "20150031_red.h"
 
 #define ENABLE_DEEP_SLEEP 0
 #define DEFAULT_WAKEUP_LEVEL ESP_GPIO_WAKEUP_GPIO_HIGH
@@ -46,7 +48,7 @@ void testdrawline();
 void testdrawchar();
 void testfillrect();
 
-ColorMemLCD display(SCK, MOSI, SS, EXTCOMIN);
+ColorMemLCD display(&SPI, SCK, MOSI, SS, EXTCOMIN, 8000000);
 
 #define BLACK LCD_COLOR_BLACK
 #define WHITE LCD_COLOR_WHITE
@@ -107,13 +109,93 @@ void loop_ina219()
   Serial.println(" mW");
   Serial.println("");
 }
+void drawLineWithStrokeWidth(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, uint8_t strokeWidth)
+{
+  // Calculate the direction vector of the line
+  float dx = x1 - x0;
+  float dy = y1 - y0;
+
+  // Calculate the length of the line
+  float length = sqrtf(dx * dx + dy * dy);
+
+  // Normalize the direction vector
+  float ux = dx / length;
+  float uy = dy / length;
+
+  // Calculate the normal (perpendicular) vector
+  float nx = -uy;
+  float ny = ux;
+
+  // Scale the normal vector by half the stroke width
+  float halfWidth = strokeWidth / 2.0f;
+  float offsetX = nx * halfWidth;
+  float offsetY = ny * halfWidth;
+
+  // Calculate the four corners of the rectangle
+  int16_t x0_left = x0 + offsetX;
+  int16_t y0_left = y0 + offsetY;
+  int16_t x0_right = x0 - offsetX;
+  int16_t y0_right = y0 - offsetY;
+
+  int16_t x1_left = x1 + offsetX;
+  int16_t y1_left = y1 + offsetY;
+  int16_t x1_right = x1 - offsetX;
+  int16_t y1_right = y1 - offsetY;
+
+  // Draw the first triangle
+  display.fillTriangle(x0_left, y0_left,
+                       x0_right, y0_right,
+                       x1_left, y1_left,
+                       color);
+
+  // Draw the second triangle
+  display.fillTriangle(x1_left, y1_left,
+                       x0_right, y0_right,
+                       x1_right, y1_right,
+                       color);
+}
+
+std::vector<Point> polygon1 = {
+    {15, 15},
+    {176, 0},
+    {176, 176},
+    {0, 176},
+};
+
+std::vector<Point> polygon2 = {
+    {58, 58},
+    {132, 44},
+    {176, 176},
+    {15, 176 - 15},
+};
+
+std::vector<Point> polygon3 = {
+    {176 / 2 - 5, 176 / 2},
+    {176 / 2 + 15, 176 / 2 - 8},
+    {176 - 8, 176 - 8},
+    {15, 176 - 15},
+};
+
+std::vector<Point> polygon4 = {
+    {176 / 2, 176 / 2},
+    {176 - 30, 176 - 30},
+    {176 / 3, 176 * 2 / 3},
+};
+
+std::vector<Point> polygon5 = {
+    {176 / 2, 176 / 2},
+    {176 * 2 / 3, 176 * 2 / 3},
+    {176 / 2 - 10, 176 / 2 + 10},
+};
+
+std::vector<Point> *polygons[] = {&polygon1, &polygon2, &polygon3, &polygon4, &polygon5};
 
 void setup(void)
 {
   Serial.begin(115200);
   delay(1000);
   SPI.begin(SCK, SHARP_MISO, MOSI, SS);
-  SPI.setFrequency(6000000); // 8Mhz 容易花屏
+  // SPI.setFrequency(12000000); // 8Mhz 容易花屏
 
   ledcSetup(ledChannel, freq, resolution);
 
@@ -166,14 +248,29 @@ void setup(void)
   display.setCursor(0, 128);
   display.println("Now SLEEP..");
   display.refresh();
+  if (!ENABLE_DEEP_SLEEP)
+  {
+    for (int i = 0; i < 3; i++)
+    {
+      for (auto polygon : polygons)
+      {
+        display.setClipPath(*polygon);
+        display.drawRGBBitmap(0, 0, watch_face_20150031_red, 176, 176);
+        display.clipOutPath(true);
+        display.drawRGBBitmap(0, 0, calendar_img, 176, 176);
+        display.clearClipPath();
+        display.refresh();
+        // delay(100);
+      }
 
-  display.drawRGBBitmap(0, 0, image_data, 176, 176);
-  display.refresh();
-  delay(5000);
+      display.refresh();
+      delay(500);
 
-  display.drawRGBBitmap(0, 0, calendar_img, 176, 176);
-  display.refresh();
-  delay(5000);
+      display.drawRGBBitmap(0, 0, calendar_img, 176, 176);
+      display.refresh();
+      delay(500);
+    }
+  }
 
   // TODO eggfly mod
   return;
@@ -278,9 +375,12 @@ void fadeOutAndIn()
   }
 }
 
-long cost;
+long draw_cost;
+long refresh_cost;
+
 void loop(void)
 {
+  auto t = millis();
   if (ENABLE_DEEP_SLEEP)
   {
     Serial.println("set reset tp to low");
@@ -337,11 +437,12 @@ void loop(void)
   display.setTextSize(2);
   display.setTextColor(LCD_COLOR_RED);
   display.setCursor(10, 30);
-  display.printf("cost:%ldms", cost);
-  auto t = millis();
+  display.printf("%ldms %ldms", draw_cost, refresh_cost);
+  draw_cost = millis() - t;
   display.refresh();
   // delay(10);
-  cost = millis() - t;
+  refresh_cost = millis() - t - draw_cost;
+  Serial.printf("draw cost %ldms, refresh cost %ldms\n", draw_cost, refresh_cost);
   // delay(100);
 }
 
