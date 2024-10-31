@@ -217,6 +217,7 @@ void ColorMemLCD::refreshBySingleLine()
   }
 }
 
+unsigned long lastToggleVCOMTime = 0;
 
 /** Transfer to the LCD from disply buffer */
 void ColorMemLCD::refresh()
@@ -235,6 +236,11 @@ void ColorMemLCD::refresh()
   spidev->beginTransaction();
   digitalWrite(_ss, HIGH);
   spidev->transfer(LCD_COLOR_CMD_UPDATE | (polarity << 6));
+  if (millis() - lastToggleVCOMTime > 5000)
+  {
+    TOGGLE_VCOM;
+    lastToggleVCOMTime = millis();
+  }
 
   for (i = 0; i < window_h; i++)
   {

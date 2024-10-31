@@ -48,7 +48,7 @@ void testdrawline();
 void testdrawchar();
 void testfillrect();
 
-ColorMemLCD display(&SPI, SCK, MOSI, SS, EXTCOMIN, 8000000);
+ColorMemLCD display(&SPI, SCK, MOSI, SS, EXTCOMIN, 8880000);
 
 #define BLACK LCD_COLOR_BLACK
 #define WHITE LCD_COLOR_WHITE
@@ -250,7 +250,7 @@ void setup(void)
   display.refresh();
   if (!ENABLE_DEEP_SLEEP)
   {
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 2; i++)
     {
       for (auto polygon : polygons)
       {
