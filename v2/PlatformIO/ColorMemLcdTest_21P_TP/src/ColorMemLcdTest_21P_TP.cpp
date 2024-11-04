@@ -8,12 +8,20 @@
 #include "IT7259Driver.h"
 #include <Adafruit_INA219.h>
 // #include "face1.h"
-#include "calendar_data.h"
+#include "calendar_rgb111.h"
 #include "20150031.h"
 #include "20150031_red.h"
+#include "water_resist.h"
+#include "water_resist_rgb111.h"
 
 #define ENABLE_DEEP_SLEEP 0
+
+#define C3_COMPLETE_BOARD
+
+#ifdef CONFIG_IDF_TARGET_ESP32C3
 #define DEFAULT_WAKEUP_LEVEL ESP_GPIO_WAKEUP_GPIO_HIGH
+#endif
+
 #define WAKEUP_IMU_INT 1
 #define WAKEUP_TP_INT 0
 #define WAKEUP_PIN_UP 4
@@ -48,7 +56,7 @@ void testdrawline();
 void testdrawchar();
 void testfillrect();
 
-ColorMemLCD display(&SPI, SCK, MOSI, SS, EXTCOMIN, 8880000);
+ColorMemLCD display(&SPI, SCK, MOSI, SS, EXTCOMIN, 8580000);
 
 #define BLACK LCD_COLOR_BLACK
 #define WHITE LCD_COLOR_WHITE
@@ -188,15 +196,91 @@ std::vector<Point> polygon5 = {
     {176 / 2 - 10, 176 / 2 + 10},
 };
 
+const int NUM_POLYGONS = 5;
+const int NUM_TARGET_POLYGONS = 4;
+
+std::vector<Point> targetPolygon1 = {
+    {176 / 2, 176 / 2},
+    {176 * 3 / 4, 176 - 20},
+    {176 / 2 - 5, 176 / 2 + 10},
+};
+
+std::vector<Point> targetPolygon2 = {
+    {176 / 2, 176 / 2},
+    {176 * 3 / 4, 176 - 20},
+    {176 / 5, 176 - 5},
+};
+
+std::vector<Point> targetPolygon3 = {
+    {176 / 2, 176 / 2},
+    {176 * 3 / 4, 176 - 20},
+    {176 / 5, 176 - 5},
+    {15, 35},
+};
+
+std::vector<Point> targetPolygon4 = {
+    {176 * 3 / 4, 176 - 20},
+    {176 / 5, 176 - 5},
+    {15, 35},
+    {176 - 15, 35},
+};
+
 std::vector<Point> *polygons[] = {&polygon1, &polygon2, &polygon3, &polygon4, &polygon5};
+std::vector<Point> *targetPolygons[] = {&targetPolygon1, &targetPolygon2, &targetPolygon3, &targetPolygon4};
+
+uint8_t masks[NUM_POLYGONS][LCD_DISP_HEIGHT * MASK_BYTES_PER_ROW];
+uint8_t targetMasks[NUM_TARGET_POLYGONS][LCD_DISP_HEIGHT * MASK_BYTES_PER_ROW];
+
+void precomputeAllMasks()
+{
+  for (int i = 0; i < NUM_POLYGONS; ++i)
+  {
+    display.precomputeMask(*polygons[i], masks[i]);
+  }
+  for (int i = 0; i < NUM_TARGET_POLYGONS; ++i)
+  {
+    display.precomputeMask(*targetPolygons[i], targetMasks[i]);
+  }
+}
+
+void drawPolygon(const std::vector<Point> &polygon, uint16_t color, uint8_t strokeWidth)
+{
+  for (size_t i = 0; i < polygon.size(); ++i)
+  {
+    Point p1 = polygon[i];
+    Point p2 = polygon[(i + 1) % polygon.size()];
+    drawLineWithStrokeWidth(p1.x, p1.y, p2.x, p2.y, color, strokeWidth);
+    display.fillCircle(p1.x, p1.y, strokeWidth / 2, color);
+    // drawLine(p1.x, p1.y, p2.x, p2.y);
+  }
+}
+
+void waitForEnter()
+{
+  return;
+  while (true)
+  {
+    if (Serial.available() > 0)
+    {
+      char inChar = Serial.read();
+      if (inChar == '\n')
+      {
+        // 只检测回车符
+        break; // 退出循环，继续执行程序
+      }
+    }
+  }
+}
 
 void setup(void)
 {
   Serial.begin(115200);
   delay(1000);
+  Serial.println("Hello Serial!");
   SPI.begin(SCK, SHARP_MISO, MOSI, SS);
+  precomputeAllMasks();
   // SPI.setFrequency(12000000); // 8Mhz 容易花屏
-
+#if defined(CONFIG_IDF_TARGET_ESP32C3) && defined(C3_COMPLETE_BOARD)
   ledcSetup(ledChannel, freq, resolution);
 
   // 将LEDC通道绑定到GPIO引脚
@@ -205,12 +289,11 @@ void setup(void)
 
   pinMode(TP_INT, INPUT_PULLUP);
   attachInterrupt(TP_INT, tp_int_isr, CHANGE);
-
-  Serial.println("Hello!");
-
   // tp i2c
   Wire.begin(TP_SDA, TP_SCL); // sda= /scl=
 
+#endif
+  Serial.println("Hello!");
   pinMode(TP_RESET, OUTPUT);
   digitalWrite(TP_RESET, HIGH);
 
@@ -232,6 +315,7 @@ void setup(void)
     display.refresh();
   }
 
+#if defined(CONFIG_IDF_TARGET_ESP32C3) && defined(C3_COMPLETE_BOARD)
   if (!ina219.begin())
   {
     Serial.println("Failed to find INA219 chip");
@@ -242,6 +326,7 @@ void setup(void)
     loop_ina219();
     ina219.powerSave(true);
   }
+#endif
 
   display.setTextSize(3);
   display.setTextColor(LCD_COLOR_MAGENTA);
@@ -250,24 +335,64 @@ void setup(void)
   display.refresh();
   if (!ENABLE_DEEP_SLEEP)
   {
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < 64; i++)
     {
-      for (auto polygon : polygons)
-      {
-        display.setClipPath(*polygon);
-        display.drawRGBBitmap(0, 0, watch_face_20150031_red, 176, 176);
-        display.clipOutPath(true);
-        display.drawRGBBitmap(0, 0, calendar_img, 176, 176);
-        display.clearClipPath();
-        display.refresh();
-        // delay(100);
-      }
-
+      display.drawRGB111_4Bit(water_resist_rgb111);
       display.refresh();
       delay(500);
-
-      display.drawRGBBitmap(0, 0, calendar_img, 176, 176);
+      // display.fillRoundRect(0, 0, 176, 176, 10, LCD_COLOR_BLACK);
+      display.drawRGB111_4Bit(water_resist_rgb111);
+      // display.drawRGBBitmap(0, 0, water_resist_rgb111, 176, 176);
       display.refresh();
+      waitForEnter();
+      for (uint8_t i = 0; i < NUM_POLYGONS; i++)
+      {
+        auto t = micros();
+        display.setClipMask(masks[i]);
+        display.clipOutPath(true);
+        auto t1 = micros();
+        // display.fillRoundRect(0, 0, 176, 176, 10, LCD_COLOR_YELLOW);
+        display.drawRGB111_4Bit(water_resist_rgb111);
+        auto t2 = micros();
+        Serial.printf("frame %d: t1 %ldus, t2 %ldus\n", i, t1 - t, t2 - t1);
+        display.clipOutPath(false);
+        // display.fillRoundRect(0, 0, 176, 176, 10, LCD_COLOR_BLACK);
+        display.fillScreen(LCD_COLOR_WHITE);
+        display.clearClipMask();
+        drawPolygon(*polygons[i], LCD_COLOR_BLACK, 9);
+        display.refresh();
+        Serial.printf("cost %ldus\n", micros() - t);
+        waitForEnter();
+      }
+      display.fillScreen(LCD_COLOR_WHITE);
+      display.refresh();
+      waitForEnter();
+      for (int8_t i = 0; i < NUM_TARGET_POLYGONS; i++)
+      {
+        auto t = micros();
+        display.setClipMask(targetMasks[i]);
+        display.clipOutPath(true);
+        auto t1 = micros();
+        display.drawRGB111_4Bit(calendar_rgb111);
+        auto t2 = micros();
+        Serial.printf("frame %d: t1 %ldus, t2 %ldus\n", i, t1 - t, t2 - t1);
+        display.clipOutPath(false);
+        // display.fillRoundRect(0, 0, 176, 176, 10, LCD_COLOR_BLACK);
+        display.fillScreen(LCD_COLOR_WHITE);
+        display.clearClipMask();
+        drawPolygon(*targetPolygons[i], LCD_COLOR_BLACK, 9);
+        display.refresh();
+        Serial.printf("cost %ldus\n", micros() - t);
+        waitForEnter();
+      }
+      display.drawRGB111_4Bit(calendar_rgb111);
+      display.refresh();
+      waitForEnter();
+
+      // display.refresh();
+      // delay(500);
+
+      // display.fillRoundRect(0, 0, 176, 176, 10, LCD_COLOR_YELLOW);
       delay(500);
     }
   }
@@ -380,20 +505,21 @@ long refresh_cost;
 
 void loop(void)
 {
-  auto t = millis();
+  auto t = micros();
   if (ENABLE_DEEP_SLEEP)
   {
     Serial.println("set reset tp to low");
     digitalWrite(TP_RESET, LOW);
     delay(500);
     Serial.println("sleep 500ms ok.");
-
+#if defined(CONFIG_IDF_TARGET_ESP32C3) && defined(C3_COMPLETE_BOARD)
     esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
     ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(
         BIT(WAKEUP_IMU_INT), DEFAULT_WAKEUP_LEVEL));
     Serial.println("--- NOW GOING TO SLEEP! ---");
     // esp_deep_sleep_enable_gpio_wakeup();
     esp_deep_sleep_start();
+#endif
   }
 
   frame_count++;
@@ -419,7 +545,8 @@ void loop(void)
 
   color++;
   color %= 8;
-  display.fillRect(10, 9, 130, 40, LCD_COLOR_WHITE);
+  display.fillRect(5, 9, 176 - 5 * 2, 40, LCD_COLOR_WHITE);
+#if defined(CONFIG_IDF_TARGET_ESP32C3) && defined(C3_COMPLETE_BOARD)
   for (int i = 0; i < 1; i++)
   {
     update_tp();
@@ -434,15 +561,16 @@ void loop(void)
       break;
     }
   }
+#endif
   display.setTextSize(2);
   display.setTextColor(LCD_COLOR_RED);
   display.setCursor(10, 30);
   display.printf("%ldms %ldms", draw_cost, refresh_cost);
-  draw_cost = millis() - t;
+  draw_cost = micros() - t;
   display.refresh();
   // delay(10);
-  refresh_cost = millis() - t - draw_cost;
-  Serial.printf("draw cost %ldms, refresh cost %ldms\n", draw_cost, refresh_cost);
+  refresh_cost = micros() - t - draw_cost;
+  Serial.printf("draw cost %ldus, refresh cost %ldus\n", draw_cost, refresh_cost);
   // delay(100);
 }
 

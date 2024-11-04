@@ -35,6 +35,7 @@ A. Jordan 2018.
  */
 #define LCD_DEVICE_WIDTH (176)
 #define LCD_DEVICE_HEIGHT (176)
+#define MASK_BYTES_PER_ROW (LCD_DEVICE_WIDTH / 8)  
 
 /** @def
  * window system define
@@ -74,12 +75,17 @@ A. Jordan 2018.
 /** A class for Color Memory LCD Library
  */
 
+struct Point
+{
+  int16_t x;
+  int16_t y;
+};
 
-  struct Point {
-    int16_t x;  
-    int16_t y; 
-  };
-  
+/* temporary buffer */
+extern char cmd_buf[LCD_DISP_WIDTH / 2] WORD_ALIGNED_ATTR; /* for sending command */
+// char  disp_buf[(LCD_DISP_WIDTH/2)*LCD_DISP_HEIGHT_MAX_BUF];   /* display buffer */
+extern char disp_buf[(LCD_DISP_WIDTH / 2) * LCD_DISP_HEIGHT] WORD_ALIGNED_ATTR;
+
 class ColorMemLCD : public Adafruit_GFX
 {
 public:
@@ -90,20 +96,26 @@ public:
   void clearDisplay();
   void refreshBySingleLine(void);
   void refresh(void);
+  void refresh_4bit(void);
   void refresh_3bit(void);
   void setBlinkMode(char mode);
   void setTransMode(char mode);
   void cls(void);
-  void setClipPath(const std::vector<Point>& path);
+  // void setClipPath(const std::vector<Point> &path);
   void clipOutPath(bool enable);
-  void clearClipPath();
-
+  // void clearClipPath();
+  void setClipMask(uint8_t* maskBuffer);
+  void clearClipMask();
+  void precomputeMask(const std::vector<Point> &clipPath, uint8_t* maskBuffer);
+  void copyMemoryBuffer(uint8_t* buffer);
+  void drawRGB111_4Bit(uint8_t *buffer); 
 
 private:
   Adafruit_SPIDevice *spidev = NULL;
   std::vector<Point> clipPath; // 裁剪多边形的点集合
   bool clipEnabled = false;    // 是否启用裁剪
   bool clipInside = true;      // true 表示仅绘制多边形内部，false 表示仅绘制多边形外部
+  uint8_t* mask = nullptr;  
 
   uint8_t _ss, _clk, _mosi, _extcomin;
   volatile uint8_t *dataport, *clkport;
@@ -130,16 +142,14 @@ private:
   uint16_t _foreground;
   uint16_t _background = LCD_COLOR_WHITE;
 
-  /* temporary buffer */
-  char cmd_buf[LCD_DISP_WIDTH / 2]; /* for sending command */
-                                    // char    disp_buf[(LCD_DISP_WIDTH/2)*LCD_DISP_HEIGHT_MAX_BUF];   /* display buffer */
-  char disp_buf[(LCD_DISP_WIDTH / 2) * LCD_DISP_HEIGHT];
-  char file_buf[118];
+  inline void setMaskBit(int16_t x, int16_t y, bool value, uint8_t* maskBuffer);
 
+  inline bool getMaskBit(int16_t x, int16_t y, uint8_t* maskBuffer); 
   void sendbyte(uint8_t data);
   void sendBytes(uint8_t *data, uint16_t len);
 
   void sendbyteLSB(uint8_t data);
   void sendLineCommand(char *line_cmd, int line);
   void sendLineCommand3bit(char *line_cmd, int line);
+  void computeBoundingBox(const std::vector<Point> &polygon, int16_t &minX, int16_t &maxX, int16_t &minY, int16_t &maxY);
 };

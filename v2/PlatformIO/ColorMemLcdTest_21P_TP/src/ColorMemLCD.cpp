@@ -15,6 +15,7 @@ A. Jordan 2018.
 *********************************************************************/
 
 #include "ColorMemLCD.h"
+#include <Arduino.h>
 
 /**************************************************************************
     Sharp Memory Display Connector
@@ -32,13 +33,15 @@ A. Jordan 2018.
       8   DISP            Display On(High)/Off(Low)
 
  **************************************************************************/
+char cmd_buf[LCD_DISP_WIDTH / 2] DMA_ATTR; /* for sending command */
+char disp_buf[(LCD_DISP_WIDTH / 2) * LCD_DISP_HEIGHT] DMA_ATTR;
 
 // new stuff
 /** @def
  * LCD_Color SPI commands
  */
 #define LCD_COLOR_CMD_UPDATE (0x90)         //!< Update Mode (4bit Data Mode)
-#define LCD_COLOR_CMD_UPDATE_3BIT (0x80)         //!< Update Mode (4bit Data Mode)
+#define LCD_COLOR_CMD_UPDATE_3BIT (0x80)    //!< Update Mode (4bit Data Mode)
 #define LCD_COLOR_CMD_ALL_CLEAR (0x20)      //!< All Clear Mode
 #define LCD_COLOR_CMD_NO_UPDATE (0x00)      //!< No Update Mode
 #define LCD_COLOR_CMD_BLINKING_WHITE (0x18) //!< Display Blinking Color Mode (White)
@@ -102,7 +105,6 @@ ColorMemLCD::ColorMemLCD(SPIClass *theSPI, uint8_t clk, uint8_t mosi, uint8_t ss
   /* initialize temporary buffer */
   memset(&cmd_buf[0], 0, sizeof(cmd_buf));
   memset(&disp_buf[0], (char)((_background & 0x0F) | ((_background & 0x0F) << 4)), sizeof(disp_buf));
-  memset(&file_buf[0], 0, sizeof(file_buf));
 
   /* display turn ON */
   // command_AllClear();
@@ -110,37 +112,45 @@ ColorMemLCD::ColorMemLCD(SPIClass *theSPI, uint8_t clk, uint8_t mosi, uint8_t ss
   clearDisplay();
 }
 
-/** Set a pixel on the window memory */
 void ColorMemLCD::drawPixel(int16_t x, int16_t y, uint16_t color)
 {
-  if (clipEnabled)
-  {
-    bool inside = pointInPolygon(x, y, clipPath);
-    if ((clipInside && !inside) || (!clipInside && inside))
-    {
-      return; // 不绘制此像素
-    }
-  }
-  // 上面是 clipPath 判断逻辑
-
+  // 检查是否在绘制范围内
   if ((window_x > x) ||
       ((window_x + window_w) <= x) ||
       (window_y > y) ||
       ((window_y + window_h) <= y))
   {
-    /* out of display buffer */
+    // 超出显示缓冲区
     return;
   }
 
+  // 裁剪遮罩检查
+  if (clipEnabled && mask != nullptr)
+  {
+    bool maskBit = getMaskBit(x, y, mask);
+    if ((clipInside && !maskBit) || (!clipInside && maskBit))
+    {
+      return; // 不绘制此像素
+    }
+  }
+
+  // 确保颜色格式为 4 位 RGB111，加上一个 dummy 位
+  uint8_t color4bit = color & 0x0F; // 只保留低 4 位
+
+  // 计算显示缓冲区中的索引
+  int index = ((window_w / 2) * (y - window_y)) + ((x - window_x) / 2);
+
   if ((x % 2) == 0)
   {
-    disp_buf[((window_w / 2) * (y - window_y)) + ((x - window_x) / 2)] &= 0x0F;
-    disp_buf[((window_w / 2) * (y - window_y)) + ((x - window_x) / 2)] |= ((color & 0x0F) << 4);
+    // 偶数 x 坐标：写入高半字节
+    disp_buf[index] &= 0x0F;             // 清除高半字节
+    disp_buf[index] |= (color4bit << 4); // 设置高半字节
   }
   else
   {
-    disp_buf[((window_w / 2) * (y - window_y)) + ((x - window_x) / 2)] &= 0xF0;
-    disp_buf[((window_w / 2) * (y - window_y)) + ((x - window_x) / 2)] |= ((color & 0x0F));
+    // 奇数 x 坐标：写入低半字节
+    disp_buf[index] &= 0xF0;      // 清除低半字节
+    disp_buf[index] |= color4bit; // 设置低半字节
   }
 }
 
@@ -167,14 +177,37 @@ void ColorMemLCD::drawPixel(int16_t x, int16_t y, uint16_t color)
 /** Fill the window memory with background color */
 void ColorMemLCD::cls(void)
 {
-  memset(&disp_buf[0], (char)((_background & 0x0F) | ((_background & 0x0F) << 4)), sizeof(disp_buf));
+  // todo
+  // memset(&disp_buf[0], (char)((_background & 0x0F) | ((_background & 0x0F) << 4)), sizeof(disp_buf));
 }
+
+uint8_t *prepared_buf = nullptr;
 
 void ColorMemLCD::begin()
 {
-  if (!spidev->begin()) {
+  if (!spidev->begin())
+  {
     Serial.println("Failed to initialize SPI communication");
   }
+  prepared_buf = (uint8_t *)malloc(15842);
+  uint8_t *buf_ptr = prepared_buf;
+  *buf_ptr = LCD_COLOR_CMD_UPDATE;
+  buf_ptr++;
+  for (int i = 0; i < 176; i++)
+  {
+    *buf_ptr = i + 1; // line 8 bits
+    buf_ptr++;
+    for (int j = 0; j < 88; j++)
+    {
+      *buf_ptr = 0x00;
+      buf_ptr++;
+    }
+    *buf_ptr = 0x00;
+    buf_ptr++;
+  }
+  *buf_ptr = 0x00;
+  buf_ptr++;
+  Serial.printf("buf_ptr - prepared_buf = %d\n", buf_ptr - prepared_buf);
 }
 
 /** set transpalent effect */
@@ -210,7 +243,7 @@ void ColorMemLCD::refreshBySingleLine()
     memset(&cmd_buf[0], (char)((_background & 0x0F) | ((_background & 0x0F) << 4)), sizeof(cmd_buf));
 
     /* copy to command buffer */
-    memcpy(&cmd_buf[(window_x / 2)], &disp_buf[(window_w / 2) * i], copy_width);
+    memcpy(&cmd_buf[0], &disp_buf[(window_w / 2) * i], copy_width);
 
     /* send cmaoond request */
     sendLineCommand(&cmd_buf[0], window_y + i);
@@ -220,21 +253,19 @@ void ColorMemLCD::refreshBySingleLine()
 unsigned long lastToggleVCOMTime = 0;
 
 /** Transfer to the LCD from disply buffer */
+void ColorMemLCD::refresh_4bit()
+{
+  digitalWrite(_ss, HIGH);
+  spidev->beginTransaction();
+  spidev->transfer(prepared_buf, 15842);
+  spidev->endTransaction();
+  digitalWrite(_ss, LOW);
+}
+
 void ColorMemLCD::refresh()
 {
-  int32_t i;
-  int copy_width;
-  if (window_x + window_w < LCD_DISP_WIDTH)
-  {
-    copy_width = (window_w / 2);
-  }
-  else
-  {
-    copy_width = ((LCD_DISP_WIDTH - window_x) / 2);
-  }
-
-  spidev->beginTransaction();
   digitalWrite(_ss, HIGH);
+  spidev->beginTransaction();
   spidev->transfer(LCD_COLOR_CMD_UPDATE | (polarity << 6));
   if (millis() - lastToggleVCOMTime > 5000)
   {
@@ -242,93 +273,184 @@ void ColorMemLCD::refresh()
     lastToggleVCOMTime = millis();
   }
 
-  for (i = 0; i < window_h; i++)
+  for (int32_t i = 0; i < window_h; i++)
   {
-
-    if (window_y + i > LCD_DISP_HEIGHT)
+    if (i > LCD_DISP_HEIGHT)
     {
       /* out of window system */
       break;
     }
 
     /* initialize command buffer */
-    memset(&cmd_buf[0], (char)((_background & 0x0F) | ((_background & 0x0F) << 4)), sizeof(cmd_buf));
+    // memset(&cmd_buf[0], (char)((_background & 0x0F) | ((_background & 0x0F) << 4)), sizeof(cmd_buf));
 
     /* copy to command buffer */
-    memcpy(&cmd_buf[(window_x / 2)], &disp_buf[(window_w / 2) * i], copy_width);
-
+    memcpy(&cmd_buf[0], &disp_buf[(window_w / 2) * i], LCD_DISP_WIDTH / 2);
+    // cmd_buf[LCD_DISP_WIDTH / 2+1] = (0x00);
+    // uint8_t *buf_ptr = (uint8_t *)&disp_buf[(window_w / 2) * i];
     /* send cmaoond request */
     // sendLineCommand(&cmd_buf[0], window_y + i);
 
-    spidev->transfer(window_y + i + 1); // line 8 bits
-    spidev->transfer((uint8_t *)&cmd_buf[0], (LCD_DISP_WIDTH / 2));
+    spidev->transfer(i + 1); // line 8 bits
+    // dma 是异步的。所以需要memcpy
+    spidev->transfer((uint8_t *)cmd_buf, (LCD_DISP_WIDTH / 2));
     // dummy 6+2 bits
     spidev->transfer(0x00);
   }
-
-  digitalWrite(_ss, LOW);
+  spidev->transfer(0x00);
   spidev->endTransaction();
+  digitalWrite(_ss, LOW);
 }
 
-/** Transfer to the LCD from display buffer */  
-void ColorMemLCD::refresh_3bit()  
-{  
-    int32_t i;  
-    int copy_bits;  
+// Function to get a bit from the mask
+inline bool ColorMemLCD::getMaskBit(int16_t x, int16_t y, uint8_t *maskBuffer)
+{
+  int index = y * MASK_BYTES_PER_ROW + (x / 8);
+  uint8_t bit = 1 << (7 - (x % 8));
 
-    // Calculate the total number of bits to copy per line  
-    if (window_x + window_w <= LCD_DISP_WIDTH)  
-    {  
-        copy_bits = window_w * 3; // Each pixel is 3 bits in rgb111  
-    }  
-    else  
-    {  
-        copy_bits = (LCD_DISP_WIDTH - window_x) * 3;  
-    }  
+  return (maskBuffer[index] & bit) != 0;
+}
 
-    // Calculate the number of bytes per line  
-    int copy_bytes = (copy_bits + 7) / 8; // Round up to the nearest whole byte  
+inline void ColorMemLCD::setMaskBit(int16_t x, int16_t y, bool value, uint8_t *maskBuffer)
+{
+  int index = y * MASK_BYTES_PER_ROW + (x / 8);
+  uint8_t bit = 1 << (7 - (x % 8));
 
-    for (i = 0; i < window_h; i++)  
-    {  
-        if (window_y + i >= LCD_DISP_HEIGHT)  
-        {  
-            /* Out of display range */  
-            break;  
-        }  
+  if (value)
+  {
+    maskBuffer[index] |= bit;
+  }
+  else
+  {
+    maskBuffer[index] &= ~bit;
+  }
+}
 
-        /* Initialize command buffer */  
-        memset(cmd_buf, 0, sizeof(cmd_buf));  
+void ColorMemLCD::computeBoundingBox(const std::vector<Point> &polygon, int16_t &minX, int16_t &maxX, int16_t &minY, int16_t &maxY)
+{
+  if (polygon.empty())
+    return;
 
-        /* Copy pixel data to command buffer without dummy bits */  
-        int line_start_bit = (window_w * 3) * i; // Start bit for the current line in disp_buf  
-        int byte_offset = line_start_bit / 8;  
-        int bit_offset = line_start_bit % 8;  
+  minX = maxX = polygon[0].x;
+  minY = maxY = polygon[0].y;
 
-        // Copy the bits from disp_buf to cmd_buf  
-        for (int j = 0; j < copy_bits; j++)  
-        {  
-            // Calculate source bit position  
-            int src_bit_pos = line_start_bit + j;  
-            int src_byte = src_bit_pos / 8;  
-            int src_bit = src_bit_pos % 8;  
+  for (const auto &p : polygon)
+  {
+    if (p.x < minX)
+      minX = p.x;
+    if (p.x > maxX)
+      maxX = p.x;
+    if (p.y < minY)
+      minY = p.y;
+    if (p.y > maxY)
+      maxY = p.y;
+  }
 
-            // Get the bit value  
-            uint8_t bit_val = (disp_buf[src_byte] >> (7 - src_bit)) & 0x01;  
+  // Clamp to display bounds
+  if (minX < 0)
+    minX = 0;
+  if (maxX >= LCD_DISP_WIDTH)
+    maxX = LCD_DISP_WIDTH - 1;
+  if (minY < 0)
+    minY = 0;
+  if (maxY >= LCD_DISP_HEIGHT)
+    maxY = LCD_DISP_HEIGHT - 1;
+}
 
-            // Calculate destination bit position  
-            int dst_bit_pos = j;  
-            int dst_byte = dst_bit_pos / 8;  
-            int dst_bit = dst_bit_pos % 8;  
+void ColorMemLCD::precomputeMask(const std::vector<Point> &clipPath, uint8_t *maskBuffer)
+{
+  // 将遮罩缓冲区初始化为 0
+  memset(maskBuffer, 0, LCD_DISP_HEIGHT * MASK_BYTES_PER_ROW);
 
-            // Set the bit in cmd_buf  
-            cmd_buf[dst_byte] |= bit_val << (7 - dst_bit);  
-        }  
-        // memset(&cmd_buf[0], 0x80, 66);
+  // 计算边界框
+  int16_t minX, maxX, minY, maxY;
+  computeBoundingBox(clipPath, minX, maxX, minY, maxY);
 
-        /* Send command request */  
-        sendLineCommand(&cmd_buf[0], window_y + i);  
+  // 将边界框限制在显示范围内
+  if (minX < 0)
+    minX = 0;
+
+  if (maxX >= LCD_DISP_WIDTH)
+    maxX = LCD_DISP_WIDTH - 1;
+  // minY = max(0, minY);
+  if (minY < 0)
+    minY = 0;
+  //  maxY = min(LCD_DISP_HEIGHT - 1, maxY);
+  if (maxY >= LCD_DISP_HEIGHT)
+    maxY = LCD_DISP_HEIGHT - 1;
+
+  // 遍历边界框内的每个像素，计算遮罩位
+  for (int16_t y = minY; y <= maxY; ++y)
+  {
+    for (int16_t x = minX; x <= maxX; ++x)
+    {
+      if (pointInPolygon(x, y, clipPath))
+      {
+        setMaskBit(x, y, true, maskBuffer);
+      }
     }
+  }
+}
+
+/** Transfer to the LCD from display buffer */
+void ColorMemLCD::refresh_3bit()
+{
+  int32_t i;
+  int copy_bits;
+
+  // Calculate the total number of bits to copy per line
+  if (window_x + window_w <= LCD_DISP_WIDTH)
+  {
+    copy_bits = window_w * 3; // Each pixel is 3 bits in rgb111
+  }
+  else
+  {
+    copy_bits = (LCD_DISP_WIDTH - window_x) * 3;
+  }
+
+  // Calculate the number of bytes per line
+  int copy_bytes = (copy_bits + 7) / 8; // Round up to the nearest whole byte
+
+  for (i = 0; i < window_h; i++)
+  {
+    if (window_y + i >= LCD_DISP_HEIGHT)
+    {
+      /* Out of display range */
+      break;
+    }
+
+    /* Initialize command buffer */
+    memset(cmd_buf, 0, sizeof(cmd_buf));
+
+    /* Copy pixel data to command buffer without dummy bits */
+    int line_start_bit = (window_w * 3) * i; // Start bit for the current line in disp_buf
+    int byte_offset = line_start_bit / 8;
+    int bit_offset = line_start_bit % 8;
+
+    // Copy the bits from disp_buf to cmd_buf
+    for (int j = 0; j < copy_bits; j++)
+    {
+      // Calculate source bit position
+      int src_bit_pos = line_start_bit + j;
+      int src_byte = src_bit_pos / 8;
+      int src_bit = src_bit_pos % 8;
+
+      // Get the bit value
+      uint8_t bit_val = (disp_buf[src_byte] >> (7 - src_bit)) & 0x01;
+
+      // Calculate destination bit position
+      int dst_bit_pos = j;
+      int dst_byte = dst_bit_pos / 8;
+      int dst_bit = dst_bit_pos % 8;
+
+      // Set the bit in cmd_buf
+      cmd_buf[dst_byte] |= bit_val << (7 - dst_bit);
+    }
+    // memset(&cmd_buf[0], 0x80, 66);
+
+    /* Send command request */
+    sendLineCommand(&cmd_buf[0], window_y + i);
+  }
 }
 
 /** send data packet */
@@ -371,7 +493,6 @@ void ColorMemLCD::sendLineCommand(char *line_cmd, int line)
   spidev->endTransaction();
 }
 
-
 /** send data packet */
 void ColorMemLCD::sendLineCommand3bit(char *line_cmd, int line)
 {
@@ -391,7 +512,7 @@ void ColorMemLCD::sendLineCommand3bit(char *line_cmd, int line)
   sendbyte(LCD_COLOR_CMD_UPDATE_3BIT | (polarity << 6)); // Command
   TOGGLE_VCOM;
   sendbyte(line + 1); // line
-  sendBytes((uint8_t *)line_cmd, (LCD_DISP_WIDTH *3/8));
+  sendBytes((uint8_t *)line_cmd, (LCD_DISP_WIDTH * 3 / 8));
   // SPI.endTransaction();
   // for( j = 0 ; j < (LCD_DISP_WIDTH/2) ; j++ ) {
   //     if( j >= (LCD_DEVICE_WIDTH/2) ) {
@@ -489,7 +610,7 @@ void ColorMemLCD::sendbyteLSB(uint8_t data)
 /**************************************************************************/
 void ColorMemLCD::clearDisplay()
 {
-  memset(&disp_buf[0], (char)((_background & 0x0F) | ((_background & 0x0F) << 4)), sizeof(disp_buf));
+  // memset(&disp_buf[0], (char)((_background & 0x0F) | ((_background & 0x0F) << 4)), sizeof(disp_buf));
 
   // Send the clear screen command rather than doing a HW refresh (quicker)
   digitalWrite(_ss, HIGH);
@@ -502,21 +623,86 @@ void ColorMemLCD::clearDisplay()
   digitalWrite(_ss, LOW);
 }
 
-void ColorMemLCD::setClipPath(const std::vector<Point> &path)
+
+void ColorMemLCD::setClipMask(uint8_t *maskBuffer)
 {
-  clipPath = path;
+  mask = maskBuffer;
   clipEnabled = true;
-  clipInside = true; // 默认裁剪内部
+}
+
+void ColorMemLCD::clearClipMask()
+{
+  mask = nullptr;
+  clipEnabled = false;
 }
 
 void ColorMemLCD::clipOutPath(bool enable)
 {
-  clipInside = !enable;
+  clipInside = enable;
 }
 
-// 清除裁剪路径
-void ColorMemLCD::clearClipPath()
+void ColorMemLCD::copyMemoryBuffer(uint8_t *buffer)
 {
-  clipPath.clear();
-  clipEnabled = false;
+  memcpy(disp_buf, buffer, LCD_DISP_WIDTH * LCD_DISP_HEIGHT / 2);
 }
+
+void ColorMemLCD::drawRGB111_4Bit(uint8_t *buffer)  
+{  
+    // Iterate over each pixel in the buffer  
+    for (int16_t y = 0; y < LCD_DISP_HEIGHT; y++)  
+    {  
+        for (int16_t x = 0; x < LCD_DISP_WIDTH; x++)  
+        {  
+            // Clipping mask check  
+            if (clipEnabled && mask != nullptr)  
+            {  
+                bool maskBit = getMaskBit(x, y, mask);  
+                if ((clipInside && !maskBit) || (!clipInside && maskBit))  
+                {  
+                    continue; // Skip this pixel  
+                }  
+            }  
+
+            // Calculate the index in the source buffer  
+            int srcIndex = (y * (LCD_DISP_WIDTH / 2)) + (x / 2);  
+            uint8_t srcByte = buffer[srcIndex];  
+
+            // Extract the color for the current pixel  
+            uint8_t color4bit;  
+            if ((x % 2) == 0)  
+            {  
+                // Even x coordinate: high nibble  
+                color4bit = (srcByte & 0xF0) >> 4;  
+            }  
+            else  
+            {  
+                // Odd x coordinate: low nibble  
+                color4bit = srcByte & 0x0F;  
+            }  
+
+            // Calculate the index in the display buffer  
+            int destIndex = (y * (LCD_DISP_WIDTH / 2)) + (x / 2);  
+
+            // Preserve the other pixel in the byte  
+            if ((x % 2) == 0)  
+            {  
+                // Even x coordinate: write to high nibble  
+                disp_buf[destIndex] &= 0x0F;             // Clear high nibble  
+                disp_buf[destIndex] |= (color4bit << 4); // Set high nibble  
+            }  
+            else  
+            {  
+                // Odd x coordinate: write to low nibble  
+                disp_buf[destIndex] &= 0xF0;      // Clear low nibble  
+                disp_buf[destIndex] |= color4bit; // Set low nibble  
+            }  
+        }  
+    }  
+}  
+
+// 清除裁剪路径
+// void ColorMemLCD::clearClipPath()
+// {
+//   clipPath.clear();
+//   clipEnabled = false;
+// }
