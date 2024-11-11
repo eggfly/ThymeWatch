@@ -14,21 +14,21 @@
 #include "water_resist.h"
 #include "water_resist_rgb111.h"
 
-#define ENABLE_DEEP_SLEEP 0
+#define ENABLE_DEEP_SLEEP   1
 
 #define C3_COMPLETE_BOARD
 
 #ifdef CONFIG_IDF_TARGET_ESP32C3
-#define DEFAULT_WAKEUP_LEVEL ESP_GPIO_WAKEUP_GPIO_HIGH
+#define DEFAULT_WAKEUP_LEVEL ESP_GPIO_WAKEUP_GPIO_LOW
 #endif
 
-#define WAKEUP_IMU_INT 1
 #define WAKEUP_TP_INT 0
+#define WAKEUP_IMU_INT 1
 #define WAKEUP_PIN_UP 4
 // #define WAKEUP_PIN_DOWN 9
 
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP 10       /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP   30       /* Time ESP32 will go to sleep (in seconds) */
 
 // LED ANODE -> IO5
 
@@ -287,8 +287,9 @@ void setup(void)
   ledcAttachPin(ledPin, ledChannel);
   ledcWrite(ledChannel, maxDuty);
 
-  pinMode(TP_INT, INPUT_PULLUP);
-  attachInterrupt(TP_INT, tp_int_isr, CHANGE);
+  pinMode(TP_INT, INPUT);
+  pinMode(WAKEUP_PIN_UP, INPUT);
+  // attachInterrupt(TP_INT, tp_int_isr, CHANGE);
   // tp i2c
   Wire.begin(TP_SDA, TP_SCL); // sda= /scl=
 
@@ -325,6 +326,7 @@ void setup(void)
     Serial.println("Found INA219 chip");
     loop_ina219();
     ina219.powerSave(true);
+    Serial.println("INA219 chip enter powerSave");
   }
 #endif
 
@@ -506,16 +508,24 @@ long refresh_cost;
 void loop(void)
 {
   auto t = micros();
-  if (ENABLE_DEEP_SLEEP)
+  if (ENABLE_DEEP_SLEEP && millis() > 5000)
   {
     Serial.println("set reset tp to low");
-    digitalWrite(TP_RESET, LOW);
+    digitalWrite(TP_RESET, LOW); // 注释掉这行，会反复重启；加上这行，触摸不会唤醒
+    // digitalWrite(TP_RESET, HIGH); // 注释掉这行，会反复重启；加上这行，触摸不会唤醒
     delay(500);
     Serial.println("sleep 500ms ok.");
 #if defined(CONFIG_IDF_TARGET_ESP32C3) && defined(C3_COMPLETE_BOARD)
     esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+
+    gpio_set_direction((gpio_num_t)WAKEUP_TP_INT, GPIO_MODE_INPUT);
+    gpio_set_direction((gpio_num_t)WAKEUP_IMU_INT, GPIO_MODE_INPUT);
+    // gpio_set_direction((gpio_num_t)WAKEUP_PIN_UP, GPIO_MODE_INPUT);
+    gpio_sleep_set_direction((gpio_num_t)WAKEUP_TP_INT, GPIO_MODE_INPUT);
+    gpio_sleep_set_direction((gpio_num_t)WAKEUP_IMU_INT, GPIO_MODE_INPUT);
+    gpio_sleep_set_direction((gpio_num_t)WAKEUP_PIN_UP, GPIO_MODE_INPUT);
     ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(
-        BIT(WAKEUP_IMU_INT), DEFAULT_WAKEUP_LEVEL));
+        BIT(WAKEUP_TP_INT) | BIT(WAKEUP_IMU_INT) | BIT(WAKEUP_PIN_UP), DEFAULT_WAKEUP_LEVEL));
     Serial.println("--- NOW GOING TO SLEEP! ---");
     // esp_deep_sleep_enable_gpio_wakeup();
     esp_deep_sleep_start();
