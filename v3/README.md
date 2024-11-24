@@ -2,11 +2,10 @@
 ESP32-S3 Smart Watch with JDI 8-Color Memory Display
 
 
-> <img src="images/doge.png" width="16" alt="doge"/> From Linus: <br>
+> <img src="../docs/doge.png" width="16" alt="doge"/> From Linus: <br>
 > **This is a really cool and awesome watch project!**
 
-![PCB](../v2/docs/ThymeWatchColor.jpg)
-
+![PCB](images/ThymeWatchColorS3.jpg)
 
 
 ## 使用到的 IC 和器件
