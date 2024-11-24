@@ -1,4 +1,4 @@
-# ThymeWatchColor
+# ThymeWatchColor-S3
 ESP32-S3 Smart Watch with JDI 8-Color Memory Display
 
 
@@ -11,13 +11,12 @@ ESP32-S3 Smart Watch with JDI 8-Color Memory Display
 
 ## 使用到的 IC 和器件
 
-主控: ESP32-S3-PICO with *16MB* external QIO Flash （上外置flash 16MB，比ESP32-C3FH4内置4MB的宽裕点）
-
+主控: ESP32-S3-PICO-1-N8R2/N8R8
 
 | IC | Function | 备注 |
 | -- | -- | -- |
 | HE9073A33M5R | 超低静态电流 LDO | 100mV drop-out, 0.3µA IQ, 500mA max |
-| ESP32-S3-PICO | SIP 带晶振带外围去偶电容全封装芯片 |  ESP32S3 |
+| ESP32-S3-PICO-1-N8R2 | SIP 带晶振带外围去偶电容全封装芯片 |  ESP32-S3 |
 | LPM013M126C | 176x176 JDI 8色记忆屏，带背光，带触摸 | 总成贴合 |
 | IT7259 | 屏幕电容触摸 IC | I2C 地址见下方 |
 | TP4057 | 充电 | CHRG 和 STDBY 悬空 |
@@ -28,15 +27,14 @@ ESP32-S3 Smart Watch with JDI 8-Color Memory Display
 ## IO Pins 和一些关键连接
 
 * 使用经典的 PMOS+二极管的VBUS/VBAT选择电路，输出 VSYS 送给 LDO
-* 没有单独 RESET 按钮（容易误触），而是用侧面的物理拨动开关控制整个系统的 VSYS 通电
-* IO0-IO5 是 RTC 电源域，可做deepsleep唤醒、可做ADC
-* IO9 是 BOOT，作为一个 DOWN 按钮，一共两个按钮
-* 刷机可以断电再按住 BOOT 再通电，起到 RESET+BOOT 的效果
-* LCD_DISP 上拉到 3V3，默认一直打开显示，省 GPIO
+* 背面的两个拨码开关，第一个控制整个系统的 VSYS 通电，第二个控制 ESP32S3 的 RESET
+* IO0 是 BOOT，作为一个 DOWN 按钮，一共两个按钮
+* 刷机时可以背面第一个拨码开关断电，再按住 BOOT 再通电，也可以第二个拨到 RESET 按住 BOOT 再拨回来
+* LCD_DISP 上拉到 3V3，默认一直打开显示，休眠时也要常亮
 
 | Pin | Function | 备注 |
 | -- | -- | -- |
-| IO0 | TP_INT | 触摸IC中断 |
+| IO0 | BOOT | 下按钮。启动模式选择，按下是低电平，内部弱上拉，额外有外部上拉 |
 | IO1 | IMU_INT | 加速度传感器中断 |
 | IO2 | RTC_INT | 时钟中断 |
 | IO3 | BUZZER | 蜂鸣器，用 NMOS 下管控制低功耗，默认断开 |
@@ -45,7 +43,7 @@ ESP32-S3 Smart Watch with JDI 8-Color Memory Display
 | IO6 | LCD_SCLK | 屏幕 SPI: 时钟 |
 | IO7 | LCD_SI | 屏幕 SPI: MOSI |
 | IO8 | LCD_CS | 屏幕 SPI: CS |
-| IO9 | BUTTON_DOWN (Boot) | 下按钮。启动模式选择，按下是低电平，内部弱上拉，额外有外部上拉 |
+| IO9 | BUTTON_DOWN (Boot) |  |
 | IO10 | TP_RESET | 触摸屏 RESET |
 | IO18 | USB D- | 和磁吸 USB DM 相连 |
 | IO19 | USB D+ | 和磁吸 USB DP 相连 |
