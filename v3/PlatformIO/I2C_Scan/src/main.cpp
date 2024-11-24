@@ -3,8 +3,8 @@
 
 #include <Wire.h>
 
-#define TP_SDA 41
-#define TP_SCL 42
+#define I2C2_SDA 41
+#define I2C2_SCL 42
 
 #define ULP_SDA 3
 #define ULP_SCL 2
@@ -14,7 +14,7 @@ void setup() {
   digitalWrite(47, HIGH);
   Serial.begin(115200);
   delay(2000);
-  Wire.begin(ULP_SDA, ULP_SCL);   // sda, scl reuse uart pins
+  Wire.begin(I2C2_SDA, I2C2_SCL);   // sda, scl reuse uart pins
   Serial.println("I2C Scanner");
 }
 

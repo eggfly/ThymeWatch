@@ -5,6 +5,8 @@
 
 #include "ColorMemLCD.h"
 
+#include <DS3231.h>
+
 #include "IT7259Driver.h"
 #include <Adafruit_INA219.h>
 // #include "face1.h"
@@ -15,9 +17,10 @@
 #include "water_resist_rgb111.h"
 
 #include "pat9125.h"
+#include <time.h>
 
 #define PAT_POWER (47)
-#define ENABLE_DEEP_SLEEP (1)
+#define ENABLE_DEEP_SLEEP (0)
 
 #define C3_COMPLETE_BOARD
 
@@ -31,11 +34,15 @@
 // #define WAKEUP_PIN_DOWN 9
 
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP 10       /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP 60       /* Time ESP32 will go to sleep (in seconds) */
 
 // LED ANODE -> IO5
 
 Adafruit_INA219 ina219;
+
+RTClib myRTC;
+DS3231 mySetRTC;
+
 
 PAT9125 PAT(0x75);
 
@@ -45,8 +52,12 @@ PAT9125 PAT(0x75);
 #define SS 18
 #define EXTCOMIN -1
 
-#define TP_SDA 3
-#define TP_SCL 2
+#define I2C1_SDA 3
+#define I2C1_SCL 2
+
+#define I2C2_SDA 41
+#define I2C2_SCL 40
+
 #define TP_INT 14
 #define TP_RESET 21
 
@@ -61,6 +72,10 @@ const int freq = 5000;                      // 频率（Hz）
 const int resolution = 12;                  // 分辨率（位），ESP32支持1 - 13位
 const int maxDuty = pow(2, resolution) - 1; // 最大占空比值
 
+DateTime rtc_now;
+
+void loop_rtc();
+
 void testdrawtriangle();
 void testfilltriangle();
 void testdrawroundrect();
@@ -70,7 +85,7 @@ void testdrawline();
 void testdrawchar();
 void testfillrect();
 
-ColorMemLCD display(&SPI, SCK, MOSI, SS, EXTCOMIN, 8580000);
+ColorMemLCD display(&SPI, SCK, MOSI, SS, EXTCOMIN, 7080000);
 
 #define BLACK LCD_COLOR_BLACK
 #define WHITE LCD_COLOR_WHITE
@@ -288,11 +303,10 @@ void setup(void)
   pinMode(PAT_POWER, OUTPUT);
   digitalWrite(PAT_POWER, HIGH);
   Serial.begin(115200);
-  delay(1000);
-  Serial.println("Hello Serial!");
+  // Serial.println("Hello Serial!");
   SPI.begin(SCK, SHARP_MISO, MOSI, SS);
-  precomputeAllMasks();
-  SPI.setFrequency(1000000); // 8Mhz 容易花屏
+  // precomputeAllMasks();
+  // SPI.setFrequency(8000000); // 8Mhz 容易花屏
   ledcSetup(ledChannel, freq, resolution);
 
   // 将LEDC通道绑定到GPIO引脚
@@ -303,25 +317,51 @@ void setup(void)
   pinMode(WAKEUP_PIN_UP, INPUT);
   // attachInterrupt(TP_INT, tp_int_isr, CHANGE);
   // tp i2c
-  Wire.begin(TP_SDA, TP_SCL); // sda= /scl=
+  Wire.begin(I2C1_SDA, I2C1_SCL); // sda= /scl=
+  if (!ENABLE_DEEP_SLEEP) {
+    Wire1.begin(I2C2_SDA, I2C2_SCL);
+  }
+  // Serial.println("Hello!");
 
-  Serial.println("Hello!");
-
-  PAT.pat9125_init();
-  PAT.pat9125_set_res(240, 240, true);
+  // PAT.pat9125_init();
+  // PAT.pat9125_set_res(240, 240, true);
 
   pinMode(TP_RESET, OUTPUT);
   digitalWrite(TP_RESET, HIGH);
 
   // start & clear the display
-  display.begin();
-  display.clearDisplay();
 
+  loop_rtc();
+
+  // Serial.print(rtc_now.year(), DEC);
+  // Serial.print('/');
+  // Serial.print(rtc_now.month(), DEC);
+  // Serial.print('/');
+  // Serial.print(rtc_now.day(), DEC);
+  // Serial.print(' ');
+  // Serial.print(rtc_now.hour(), DEC);
+  // Serial.print(':');
+  // Serial.print(rtc_now.minute(), DEC);
+  // Serial.println();
+
+  display.begin();
+
+  // TODO: 这句还是需要的 display.clearDisplay();
+  display.fillScreen(LCD_COLOR_WHITE);
   display.setTextSize(3);
   display.setTextColor(LCD_COLOR_RED);
-  display.setCursor(0, 0);
-  display.println("Wake UP!");
+
+  char time_buf[] = "Time\n20241123\n\20:50:50\nCost\n1000ms\n\n\n\n\n\n\n\n";
+  snprintf(time_buf, sizeof(time_buf), "Time\n%04d%02d%02d\n%02d:%02d:%02d\nCost\n%ldms\n",
+           rtc_now.year(), rtc_now.month(), rtc_now.day(),
+           rtc_now.hour(), rtc_now.minute(), rtc_now.second(),
+           millis());
+
+  display.fillScreen(LCD_COLOR_WHITE);
+  display.setCursor(0, 10);
+  display.println(time_buf);
   display.refresh();
+  return;
 
   for (int i = 0; i < 1; i++)
   {
@@ -331,19 +371,17 @@ void setup(void)
     display.refresh();
   }
 
-#if defined(CONFIG_IDF_TARGET_ESP32C3) && defined(C3_COMPLETE_BOARD)
-  if (!ina219.begin())
-  {
-    Serial.println("Failed to find INA219 chip");
-  }
-  else
-  {
-    Serial.println("Found INA219 chip");
-    loop_ina219();
-    ina219.powerSave(true);
-    Serial.println("INA219 chip enter powerSave");
-  }
-#endif
+  // if (!ina219.begin(&Wire1))
+  // {
+  //   Serial.println("Failed to find INA219 chip");
+  // }
+  // else
+  // {
+  //   Serial.println("Found INA219 chip");
+  //   loop_ina219();
+  //   ina219.powerSave(true);
+  //   Serial.println("INA219 chip enter powerSave");
+  // }
 
   display.setTextSize(3);
   display.setTextColor(LCD_COLOR_MAGENTA);
@@ -520,35 +558,72 @@ void fadeOutAndIn()
 long draw_cost;
 long refresh_cost;
 
+
+// time_t unix_time(DateTime& t) {
+//   char buf[100];
+//   strncpy(buf, "YYYY-MM-DD hh:mm:ss\0", sizeof(buf));
+//   t.format(buf);
+//   struct tm tm;
+//   time_t epoch;
+//   if (strptime(buf, "%Y-%m-%d %H:%M:%S", &tm) != NULL ) {
+//     epoch = mktime(&tm);
+// #ifdef APP_DEBUG
+//     Serial.print("unix timestamp value: ");
+//     Serial.println(epoch);
+// #endif
+//     return epoch;
+//   } else {
+//     Serial.println("time convert error");
+//     return 0;
+//   }
+// }
+
+void loop_rtc()
+{
+  rtc_now = myRTC.now();
+  DateTime compileTime = DateTime(__DATE__, __TIME__);
+  if (rtc_now.year() < compileTime.year() - 1)
+  {
+    Serial.println("RTC is older than compile time! Updating RTC...");
+    mySetRTC.setEpoch(compileTime.unixtime());
+    rtc_now = myRTC.now();
+  }
+
+  // Serial.print(rtc_now.year(), DEC);
+  // Serial.print('/');
+  // Serial.print(rtc_now.month(), DEC);
+  // Serial.print('/');
+  // Serial.print(rtc_now.day(), DEC);
+  // Serial.print(' ');
+  // Serial.print(rtc_now.hour(), DEC);
+  // Serial.print(':');
+  // Serial.print(rtc_now.minute(), DEC);
+  // Serial.println();
+
+  // Serial.print(':');
+  // Serial.print(now.second(), DEC);
+  // Serial.println();
+
+  // Serial.print(" since midnight 1/1/1970 = ");
+  // Serial.print(now.unixtime());
+  // Serial.print("s = ");
+  // Serial.print(now.unixtime() / 86400L);
+  // Serial.println("d");
+}
+
 void loop(void)
 {
   auto t = micros();
-  if (ENABLE_DEEP_SLEEP && millis() > 5000)
+  if (ENABLE_DEEP_SLEEP)
   {
     // Serial.println("set reset tp to low");
     // digitalWrite(TP_RESET, LOW); // 注释掉这行，会反复重启；加上这行，触摸不会唤醒
     // digitalWrite(TP_RESET, HIGH); // 注释掉这行，会反复重启；加上这行，触摸不会唤醒
     // delay(500);
     // Serial.println("sleep 500ms ok.");
-#if defined(CONFIG_IDF_TARGET_ESP32C3)
     esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-
-    gpio_set_direction((gpio_num_t)WAKEUP_TP_INT, GPIO_MODE_INPUT);
-    gpio_set_direction((gpio_num_t)WAKEUP_IMU_INT, GPIO_MODE_INPUT);
-    // gpio_set_direction((gpio_num_t)WAKEUP_PIN_UP, GPIO_MODE_INPUT);
-    gpio_sleep_set_direction((gpio_num_t)WAKEUP_TP_INT, GPIO_MODE_INPUT);
-    gpio_sleep_set_direction((gpio_num_t)WAKEUP_IMU_INT, GPIO_MODE_INPUT);
-    gpio_sleep_set_direction((gpio_num_t)WAKEUP_PIN_UP, GPIO_MODE_INPUT);
-    ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(
-        BIT(WAKEUP_TP_INT) | BIT(WAKEUP_IMU_INT) | BIT(WAKEUP_PIN_UP), DEFAULT_WAKEUP_LEVEL));
-    Serial.println("--- NOW GOING TO SLEEP! ---");
-    // esp_deep_sleep_enable_gpio_wakeup();
+    Serial.printf("--- NOW SLEEP! --- %ldms\n", t);
     esp_deep_sleep_start();
-#elif defined(CONFIG_IDF_TARGET_ESP32S3)
-    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-    Serial.println("--- NOW GOING TO SLEEP! ---");
-    esp_deep_sleep_start();
-#endif
   }
   frame_count++;
   if (frame_count == 20)
@@ -589,7 +664,7 @@ void loop(void)
       break;
     }
   }
-  update_pat();
+  // update_pat();
   display.setTextSize(2);
   display.setTextColor(LCD_COLOR_RED);
 
