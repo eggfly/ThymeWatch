@@ -305,7 +305,7 @@ void setup(void)
   Serial.begin(115200);
   // Serial.println("Hello Serial!");
   SPI.begin(SCK, SHARP_MISO, MOSI, SS);
-  // precomputeAllMasks();
+  precomputeAllMasks();
   // SPI.setFrequency(8000000); // 8Mhz 容易花屏
   ledcSetup(ledChannel, freq, resolution);
 
@@ -347,6 +347,7 @@ void setup(void)
   display.begin();
 
   // TODO: 这句还是需要的 display.clearDisplay();
+  display.clearDisplay();
   display.fillScreen(LCD_COLOR_WHITE);
   display.setTextSize(3);
   display.setTextColor(LCD_COLOR_RED);
@@ -361,7 +362,6 @@ void setup(void)
   display.setCursor(0, 10);
   display.println(time_buf);
   display.refresh();
-  return;
 
   for (int i = 0; i < 1; i++)
   {
@@ -390,7 +390,7 @@ void setup(void)
   display.refresh();
   if (!ENABLE_DEEP_SLEEP)
   {
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 8000000; i++)
     {
       display.drawRGB111_4Bit(water_resist_rgb111);
       display.refresh();
