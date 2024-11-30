@@ -1,0 +1,157 @@
+/*
+ * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include "esp_check.h"
+#include "rlcd_gck_encoder.h"
+
+static const char *TAG = "rlcd_gck_encoder";
+
+typedef struct {
+    rmt_encoder_t base;           // the base "class", declares the standard encoder interface
+    rmt_encoder_t *copy_encoder;  // use the copy_encoder to encode the leading and ending pulse
+    rmt_encoder_t *bytes_encoder; // use the bytes_encoder to encode the address and command data
+    rmt_symbol_word_t rlcd_gck_leading_symbol;  // GCK leading code with RMT representation
+                                                // used to sync GCK with RGB data pulses (delay GCK)
+    rmt_symbol_word_t rlcd_gck_ending_symbol;   // GCK ending code with RMT representation
+                                                // allows flexibility of the last GCK period,
+                                                // after transmission of which, an interrupt
+                                                // pulling INTB low can be triggered
+    int state;
+} rmt_rlcd_gck_encoder_t;
+
+static size_t rmt_encode_rlcd_gck(rmt_encoder_t *encoder, rmt_channel_handle_t channel, const void *primary_data, size_t data_size, rmt_encode_state_t *ret_state) {
+    rmt_rlcd_gck_encoder_t *gck_encoder = __containerof(encoder, rmt_rlcd_gck_encoder_t, base);
+    rmt_encode_state_t session_state = 0;
+    rmt_encode_state_t state = 0;
+    size_t encoded_symbols = 0;
+    rlcd_gck_scan_code_t *scan_code = (rlcd_gck_scan_code_t *)primary_data;
+    rmt_encoder_handle_t copy_encoder = gck_encoder->copy_encoder;
+    rmt_encoder_handle_t bytes_encoder = gck_encoder->bytes_encoder;
+
+    // encoded_symbols += bytes_encoder->encode(bytes_encoder, channel, &scan_code->data, sizeof(uint32_t), &session_state);
+    // if (session_state & RMT_ENCODING_COMPLETE) {
+    //     gck_encoder->state = 0; // back to the initial encoding session
+    //     state |= RMT_ENCODING_COMPLETE;
+    // }
+    // if (session_state & RMT_ENCODING_MEM_FULL) {
+    //     state |= RMT_ENCODING_MEM_FULL;
+    //     goto out; // yield if there's no free space to put other encoding artifacts
+    // }
+
+    switch (gck_encoder->state) {
+        case 0: // send leading code
+            encoded_symbols += copy_encoder->encode(copy_encoder, channel, &gck_encoder->rlcd_gck_leading_symbol,
+                                                    sizeof(rmt_symbol_word_t), &session_state);
+            if (session_state & RMT_ENCODING_COMPLETE) {
+                gck_encoder->state = 1; // we can only switch to next state when current encoder finished
+            }
+            if (session_state & RMT_ENCODING_MEM_FULL) {
+                state |= RMT_ENCODING_MEM_FULL;
+                goto out; // yield if there's no free space to put other encoding artifacts
+            }
+        // fall-through
+        case 1: // send address
+            encoded_symbols += bytes_encoder->encode(bytes_encoder, channel, &scan_code->data, data_size*sizeof(uint8_t), &session_state);
+            if (session_state & RMT_ENCODING_COMPLETE) {
+                gck_encoder->state = 2; // we can only switch to next state when current encoder finished
+            }
+            if (session_state & RMT_ENCODING_MEM_FULL) {
+                state |= RMT_ENCODING_MEM_FULL;
+                goto out; // yield if there's no free space to put other encoding artifacts
+            }
+        // fall-through
+        case 2: // send ending code
+            encoded_symbols += copy_encoder->encode(copy_encoder, channel, &gck_encoder->rlcd_gck_ending_symbol,
+                                                    sizeof(rmt_symbol_word_t), &session_state);
+            if (session_state & RMT_ENCODING_COMPLETE) {
+                gck_encoder->state = 0; // back to the initial encoding session
+                state |= RMT_ENCODING_COMPLETE;
+            }
+            if (session_state & RMT_ENCODING_MEM_FULL) {
+                state |= RMT_ENCODING_MEM_FULL;
+                goto out; // yield if there's no free space to put other encoding artifacts
+            }
+    }
+out:
+    *ret_state = state;
+    return encoded_symbols;
+}
+
+static esp_err_t rmt_del_rlcd_gck_encoder(rmt_encoder_t *encoder) {
+    rmt_rlcd_gck_encoder_t *gck_encoder = __containerof(encoder, rmt_rlcd_gck_encoder_t, base);
+    rmt_del_encoder(gck_encoder->copy_encoder);
+    rmt_del_encoder(gck_encoder->bytes_encoder);
+    free(gck_encoder);
+    return ESP_OK;
+}
+
+static esp_err_t rmt_rlcd_gck_encoder_reset(rmt_encoder_t *encoder) {
+    rmt_rlcd_gck_encoder_t *gck_encoder = __containerof(encoder, rmt_rlcd_gck_encoder_t, base);
+    rmt_encoder_reset(gck_encoder->copy_encoder);
+    rmt_encoder_reset(gck_encoder->bytes_encoder);
+    gck_encoder->state = 0;
+    return ESP_OK;
+}
+
+esp_err_t rmt_new_rlcd_gck_encoder(const rlcd_gck_encoder_config_t *config, rmt_encoder_handle_t *ret_encoder) {
+    esp_err_t ret = ESP_OK;
+    rmt_rlcd_gck_encoder_t *gck_encoder = NULL;
+    ESP_GOTO_ON_FALSE(config && ret_encoder, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
+    gck_encoder = calloc(1, sizeof(rmt_rlcd_gck_encoder_t));
+    ESP_GOTO_ON_FALSE(gck_encoder, ESP_ERR_NO_MEM, err, TAG, "no mem for rLCD GCK encoder");
+    gck_encoder->base.encode = rmt_encode_rlcd_gck;
+    gck_encoder->base.del = rmt_del_rlcd_gck_encoder;
+    gck_encoder->base.reset = rmt_rlcd_gck_encoder_reset;
+
+    rmt_copy_encoder_config_t copy_encoder_config = {};
+    ESP_GOTO_ON_ERROR(rmt_new_copy_encoder(&copy_encoder_config, &gck_encoder->copy_encoder), err, TAG, "create copy encoder failed");
+
+    // Leading and ending symbols: additional (dummy) GCK pulses as in datasheet of the rLCD.
+
+    // construct the leading code and ending code with RMT symbol format
+    gck_encoder->rlcd_gck_leading_symbol = (rmt_symbol_word_t) {
+        .level0 = 1,
+        .duration0 = 512+34,// = 23+14-3,   //9,//100ULL * config->resolution / 10000000,//9000ULL * config->resolution / 1000000,    // xULL is in [us]
+        .level1 = 0,
+        .duration1 = 512,//9,//100ULL * config->resolution / 10000000,//4500ULL * config->resolution / 1000000,
+    };
+    gck_encoder->rlcd_gck_ending_symbol = (rmt_symbol_word_t) {
+        .level0 = 1,
+        .duration0 = 512,//100ULL * config->resolution / 10000000,//560 * config->resolution / 1000000,
+        .level1 = 0,
+        .duration1 = 512,//100ULL * config->resolution / 10000000,//0x7FFF,
+    };
+
+    rmt_bytes_encoder_config_t bytes_encoder_config = {
+        .bit0 = {
+            .level0 = 1,
+            .duration0 = 512,//400ULL * config->resolution / 10000000,//560 * config->resolution / 1000000, // T0H=560us
+            .level1 = 0,
+            .duration1 = 512,//400ULL * config->resolution / 10000000,//560 * config->resolution / 1000000, // T0L=560us
+        },
+        .bit1 = {
+            .level0 = 1,
+            .duration0 = 512,//254,//32,//100ULL * config->resolution / 10000000,//560 * config->resolution / 1000000,  // T1H=560us
+            .level1 = 0,
+            .duration1 = 512,//254,//32,//100ULL * config->resolution / 10000000,//1690 * config->resolution / 1000000, // T1L=1690us
+        },
+    };
+    ESP_GOTO_ON_ERROR(rmt_new_bytes_encoder(&bytes_encoder_config, &gck_encoder->bytes_encoder), err, TAG, "create bytes encoder failed");
+
+    *ret_encoder = &gck_encoder->base;
+    return ESP_OK;
+err:
+    if (gck_encoder) {
+        if (gck_encoder->bytes_encoder) {
+            rmt_del_encoder(gck_encoder->bytes_encoder);
+        }
+        if (gck_encoder->copy_encoder) {
+            rmt_del_encoder(gck_encoder->copy_encoder);
+        }
+        free(gck_encoder);
+    }
+    return ret;
+}
