@@ -22,3 +22,9 @@ ffmpeg -i input_video.mp4 output_%04d.jpg
 * https://www.slideshare.net/slideshow/pdr15-designing-for-pebble/53943314
 * https://www.youtube.com/watch?v=LuiK8ZiPXr4
 * Bangle 2 JS: https://www.youtube.com/watch?v=cbl-h2Gtolg
+
+* ROUND: https://ttmm.is/pebble-time-round/
+* Pebble Time Round: https://www.youtube.com/watch?v=6pdaohCvPSg
+* Design: https://www.youtube.com/watch?v=D3xVQsVF4wM
+* https://www.youtube.com/watch?v=5Ajh7NFxolk
+* https://pebblestyle.com/watchface/BSOP0OIjARm/

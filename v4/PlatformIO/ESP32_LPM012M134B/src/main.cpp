@@ -1,7 +1,19 @@
 #include <Arduino.h>
+#include "color_pad.h"
+#include "mario.h"
 
+#include "ParallelColorMemLCD.h"
 
-#define USE_LEDC_PWM (1)
+// 效果还是 LEDC 好一些
+#define USE_2ND_CORE_PWM (0)
+
+#define FREQ_VCOM 100
+#define BL_FREQ 120
+
+const int ledChannel = 0; // LEDC 通道
+const int resolution = 8; // 分辨率（8 位）
+
+const int BACKLIGHT_LEDC_CHANNEL = 3;
 // Pin definitions
 #define XRST_PIN 25
 #define VST_PIN 0
@@ -21,10 +33,48 @@
 #define XFRP_PIN 19
 #define LED_PIN 2
 
-// Frame buffer for 240x240 RGB222 display
-uint8_t fb[240 * 240]; // 1 byte per pixel (RGB)
+#define BACKLIGHT_PIN 23
 
+#define COLOR_BLACK 0b00000000      // 黑色
+#define COLOR_WHITE 0b00111111      // 白色
+#define COLOR_RED 0b00110000        // 红色
+#define COLOR_GREEN 0b00001100      // 绿色
+#define COLOR_BLUE 0b00000011       // 蓝色
+#define COLOR_CYAN 0b00001111       // 青色
+#define COLOR_MAGENTA 0b00110011    // 品红
+#define COLOR_YELLOW 0b00111100     // 黄色
+#define COLOR_GRAY 0b00110000       // 灰色
+#define COLOR_DARK_RED 0b00100000   // 深红
+#define COLOR_DARK_GREEN 0b00001000 // 深绿
+#define COLOR_DARK_BLUE 0b00000010  // 深蓝
+#define COLOR_ORANGE 0b00110100     // 橙色
+#define COLOR_PURPLE 0b00100100     // 紫色
+#define COLOR_BROWN 0b00100010      // 棕色
+#define COLOR_LIGHT_GRAY 0b00111000 // 浅灰色
 
+uint8_t _16_colors[16] = {
+    COLOR_BLACK,
+    COLOR_WHITE,
+    COLOR_RED,
+    COLOR_GREEN,
+    COLOR_BLUE,
+    COLOR_CYAN,
+    COLOR_MAGENTA,
+    COLOR_YELLOW,
+    COLOR_GRAY,
+    COLOR_DARK_RED,
+    COLOR_DARK_GREEN,
+    COLOR_DARK_BLUE,
+    COLOR_ORANGE,
+    COLOR_PURPLE,
+    COLOR_BROWN,
+    COLOR_LIGHT_GRAY};
+
+// ESP32 GPIO:
+// 1: TX0 PIN
+// 3: RX0 PIN
+// 6 - 11 CANNOT USE, connected to the integrated SPI flash
+// 34 - 39 INPUT ONLY
 void resetDisplay()
 {
   digitalWrite(XRST_PIN, HIGH);
@@ -42,8 +92,6 @@ void initDisplay()
   digitalWrite(HCK_PIN, LOW);
   digitalWrite(ENB_PIN, LOW);
 }
-
-#define FREQ_VCOM 60
 
 // put function definitions here:
 void anotherTask(void *parameter)
@@ -64,22 +112,24 @@ void anotherTask(void *parameter)
   }
 }
 
+// State variables for toggling
+bool hckState = LOW;
+bool vckState = LOW;
+
 // Function to flush the framebuffer to the display
 void flushDisplay()
 {
   digitalWrite(VST_PIN, HIGH);
-  delayMicroseconds(2);
-  digitalWrite(VCK_PIN, LOW);
-
-  // State variables for toggling
-  bool hckState = LOW;
-  bool vckState = LOW;
+  // delayMicroseconds(20000);
+  vckState = !vckState;
+  digitalWrite(VCK_PIN, vckState);
 
   for (int i = 1; i <= 487; i++)
   {
     if (i == 1)
     {
       digitalWrite(VST_PIN, LOW);
+      // delayMicroseconds(21000);
     }
 
     if (i >= 2 && i <= 481)
@@ -87,6 +137,7 @@ void flushDisplay()
       digitalWrite(HST_PIN, HIGH);
       hckState = !hckState; // Toggle HCK state
       digitalWrite(HCK_PIN, hckState);
+      // delayMicroseconds(1000);
 
       for (int j = 1; j <= 121; j++)
       {
@@ -111,14 +162,14 @@ void flushDisplay()
           int pos = (x * 2) + 240 * y;
 
           // Send pixel data
-          uint8_t pixel = fb[pos];
+          uint8_t pixel = canvas->getBuffer()[pos];
           if (i % 2 == 0)
           {
             // LPB
             digitalWrite(R1_PIN, (pixel & 0b010000) ? HIGH : LOW);
             digitalWrite(G1_PIN, (pixel & 0b000100) ? HIGH : LOW);
             digitalWrite(B1_PIN, (pixel & 0b000001) ? HIGH : LOW);
-            pixel = fb[pos + 1];
+            pixel = canvas->getBuffer()[pos + 1];
             digitalWrite(R2_PIN, (pixel & 0b010000) ? HIGH : LOW);
             digitalWrite(G2_PIN, (pixel & 0b000100) ? HIGH : LOW);
             digitalWrite(B2_PIN, (pixel & 0b000001) ? HIGH : LOW);
@@ -129,7 +180,7 @@ void flushDisplay()
             digitalWrite(R1_PIN, (pixel & 0b100000) ? HIGH : LOW);
             digitalWrite(G1_PIN, (pixel & 0b001000) ? HIGH : LOW);
             digitalWrite(B1_PIN, (pixel & 0b000010) ? HIGH : LOW);
-            pixel = fb[pos + 1];
+            pixel = canvas->getBuffer()[pos + 1];
             digitalWrite(R2_PIN, (pixel & 0b100000) ? HIGH : LOW);
             digitalWrite(G2_PIN, (pixel & 0b001000) ? HIGH : LOW);
             digitalWrite(B2_PIN, (pixel & 0b000010) ? HIGH : LOW);
@@ -137,6 +188,8 @@ void flushDisplay()
         }
 
         // Toggle HCK state
+        // TODO
+        // delayMicroseconds(500);
         hckState = !hckState;
         digitalWrite(HCK_PIN, hckState);
       }
@@ -146,6 +199,7 @@ void flushDisplay()
       // delayMicroseconds(1000);
     }
 
+    // delayMicroseconds(500);
     // Toggle VCK state
     vckState = !vckState;
     digitalWrite(VCK_PIN, vckState);
@@ -166,6 +220,29 @@ uint8_t colors[] = {
 size_t currColorIndex = 0;
 size_t maxColorIndex = sizeof(colors) / sizeof(colors[0]);
 
+void testFillCircle()
+{
+  auto x = random(0, LCD_DISP_WIDTH);
+  auto y = random(0, LCD_DISP_HEIGHT);
+  uint8_t color = random(0, 64);
+  canvas->fillCircle(x, y, 32, color);
+}
+
+size_t current16ColorsIndex = 0;
+
+void testFillRainbow()
+{
+  // canvas->fillCircle
+  for (int i = 0; i < 16; i++)
+  {
+    canvas->fillCircle(120, 120, 120 - i * 7, _16_colors[i]);
+  }
+  // canvas->fillScreen(_16_colors[current16ColorsIndex]);
+  current16ColorsIndex++;
+  current16ColorsIndex = current16ColorsIndex % 16;
+  Serial.printf("current16ColorsIndex: %d\n", current16ColorsIndex);
+}
+
 void drawInitialContent()
 {
   // Example: Draw "Hello World" and some lines
@@ -178,7 +255,7 @@ void drawInitialContent()
     for (int x = 0; x < 240; x++)
     {
       int index = (y * 240 + x); // 1 byte per pixel
-      fb[index] = colors[currColorIndex];
+      canvas->getBuffer()[index] = colors[currColorIndex];
     }
   }
   currColorIndex++;
@@ -187,15 +264,26 @@ void drawInitialContent()
   // flushDisplay();
 }
 
-const int freq = 60;      // PWM 频率
-const int ledChannel = 0; // LEDC 通道
-const int resolution = 8; // 分辨率（8 位）
+void drawInitialContent2()
+{
+  canvas->fillScreen(colors[currColorIndex]);
+  currColorIndex++;
+  currColorIndex = currColorIndex % maxColorIndex;
+  // canvas->drawCircle(120, 120, 16, 0b111111);
+  // Send the frame buffer to the display
+  // flushDisplay();
+  canvas->fillCircle(120, 120, 16, 0b111111);
+}
 
 void setup()
 {
   Serial.begin(115200);
-  delay(2000);
-  if (!USE_LEDC_PWM)
+  ledcSetup(BACKLIGHT_LEDC_CHANNEL, BL_FREQ, resolution);
+  ledcAttachPin(BACKLIGHT_PIN, BACKLIGHT_LEDC_CHANNEL);
+  ledcWrite(BACKLIGHT_LEDC_CHANNEL, 220);
+  canvas = new GFXcanvas8(240, 240);
+  delay(1000);
+  if (USE_2ND_CORE_PWM)
   {
     int coreId = xPortGetCoreID();
     int anotherCoreId = 1 - coreId;
@@ -209,22 +297,22 @@ void setup()
         NULL,           /* Task handle. */
         anotherCoreId); /* Core where the task should run */
   }
-  if (USE_LEDC_PWM)
+  else
   {
-    ledcSetup(ledChannel, freq, resolution);
-    ledcSetup(1, freq, resolution);
+    ledcSetup(ledChannel, FREQ_VCOM, resolution);
+    ledcSetup(1, FREQ_VCOM, resolution);
     delayMicroseconds(1000 * 1000 / FREQ_VCOM / 2);
-    ledcSetup(2, freq, resolution);
+    ledcSetup(2, FREQ_VCOM, resolution);
     // 将 LEDC 通道连接到 GPIO
     ledcAttachPin(VCOM_PIN, ledChannel);
     ledcAttachPin(FRP_PIN, 1);
-    delayMicroseconds(1000 * 1000 / FREQ_VCOM / 2);
+    // delayMicroseconds(1000 * 1000 / FREQ_VCOM / 2);
     ledcAttachPin(XFRP_PIN, 2);
 
     ledcWrite(ledChannel, 128); // 设置 PWM 占空比
     ledcWrite(1, 128);
     // 高低电平半个周期
-    delayMicroseconds(1000 * 1000 / FREQ_VCOM / 2);
+    // delayMicroseconds(1000 * 1000 / FREQ_VCOM / 2);
     ledcWrite(2, 128);
   }
 
@@ -245,13 +333,20 @@ void setup()
   // Initialize the display
   resetDisplay();
   initDisplay();
+  // drawInitialContent2();
+  // memcpy(canvas->getBuffer(), mario, 240 * 240);
 }
 
 void loop()
 {
-  Serial.println("before drawInitialContent");
-  drawInitialContent();
-  Serial.println("after drawInitialContent");
+  Serial.println("before testFillCircle");
+  canvas->fillCircle(120, 120, 16, 0b110000);
+  // testFillRainbow();
+  testFillCircle();
+  // testFillRainbow();
+  // canvas->fillScreen(0b001100);
+  // canvas->fillCircle(120, 120, 3, 0b111111);
+  Serial.println("after testFillCircle");
   Serial.println("before flushDisplay");
   auto t = micros();
   flushDisplay();
