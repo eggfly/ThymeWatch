@@ -17,7 +17,7 @@
 // Start signal for Gate-Driver
 #define RLCD_GSP    GPIO_NUM_0  //GPIO_NUM_20
 // Clock signal for Gate-Driver
-#define RLCD_GCK    GPIO_NUM_2  //GPIO_NUM_21
+#define RLCD_GCK    GPIO_NUM_5  //GPIO_NUM_21
 // Gate enable signal
 #define RLCD_GEN    GPIO_NUM_26 //GPIO_NUM_25
 // Initial signal for Binary/Gate-Driver
