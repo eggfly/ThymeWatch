@@ -28,3 +28,5 @@ ffmpeg -i input_video.mp4 output_%04d.jpg
 * Design: https://www.youtube.com/watch?v=D3xVQsVF4wM
 * https://www.youtube.com/watch?v=5Ajh7NFxolk
 * https://pebblestyle.com/watchface/BSOP0OIjARm/
+* https://tackmobile.com/blog/Pebble-Time-Round-Interface-Kit.html
+* https://pebblestyle.com/watchfaces/2/pebble-time-round/

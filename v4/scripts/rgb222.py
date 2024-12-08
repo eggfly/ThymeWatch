@@ -60,7 +60,7 @@ def save_rgb222_image(rgb222_array, output_image_path):
 
 
 if __name__ == "__main__":
-    input_image_path = "mario_round_240.png"  # 输入PNG图像路径
+    input_image_path = "frame_1.png"  # 输入PNG图像路径
     output_c_file = "output.c"       # 输出C语言文件路径
     output_image_file = "output_rgb222.png"  # 输出RGB222图像路径
 
