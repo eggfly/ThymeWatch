@@ -17,6 +17,8 @@
 
 #define USE_2ND_CORE_PWM (1)
 
+#define USE_CONST_VCOM_NOT_PWM (1)
+
 // USE: 19801 us per frame, NOT USE: 118875 us per frame
 #define USE_S3_DEDICATED_GPIO (1)
 
@@ -62,6 +64,9 @@ const int BACKLIGHT_LEDC_CHANNEL = 1;
 
 // NO USE
 #define LED_PIN 21
+
+#define SLEEP_DURATION 100           // 深度睡眠时间（秒）  
+
 
 #define COLOR_BLACK 0b00000000      // 黑色
 #define COLOR_WHITE 0b00111111      // 白色
@@ -121,12 +126,22 @@ void initDisplay()
   digitalWrite(ENB_PIN, LOW);
 }
 
-// put function definitions here:
-void anotherTask(void *parameter)
+void initScreenPWMPins()
 {
+  Serial.println("initScreenPWMPins");
   pinMode(VCOM_PIN, OUTPUT);
   pinMode(FRP_PIN, OUTPUT);
   pinMode(XFRP_PIN, OUTPUT);
+
+  digitalWrite(VCOM_PIN, LOW);
+  digitalWrite(FRP_PIN, LOW);
+  digitalWrite(XFRP_PIN, HIGH);
+}
+
+// put function definitions here:
+void anotherTask(void *parameter)
+{
+  initScreenPWMPins();
   size_t loopCount = 0;
   while (true)
   {
@@ -496,6 +511,21 @@ void initLedc()
   // delayMicroseconds(1000 * 1000 / FREQ_VCOM / 2);
   ledcWrite(2, 128);
 }
+void setup2()
+{
+  Serial.begin(115200);
+  delay(2000);
+}
+
+void loop2()
+{
+  // gpio_deep_sleep_hold_dis()
+  gpio_hold_en(GPIO_NUM_16);
+
+  auto t = touchRead(1);
+  Serial.printf("%d\n", t);
+  delay(200);
+}
 
 void setup()
 {
@@ -509,23 +539,31 @@ void setup()
   canvas = new GFXcanvas8(240, 240);
   // delay(500);
   Serial.println("after new GFXcanvas8 and delay");
-  if (USE_2ND_CORE_PWM)
+
+  if (USE_CONST_VCOM_NOT_PWM)
   {
-    int coreId = xPortGetCoreID();
-    int anotherCoreId = 1 - coreId;
-    Serial.printf("Core ID: %d\n", coreId);
-    xTaskCreatePinnedToCore(
-        anotherTask,    /* Function to implement the task */
-        "anotherTask",  /* Name of the task */
-        10000,          /* Stack size in words */
-        NULL,           /* Task input parameter */
-        0,              /* Priority of the task */
-        NULL,           /* Task handle. */
-        anotherCoreId); /* Core where the task should run */
+    initScreenPWMPins();
   }
   else
   {
-    // initLedc();
+    if (USE_2ND_CORE_PWM)
+    {
+      int coreId = xPortGetCoreID();
+      int anotherCoreId = 1 - coreId;
+      Serial.printf("Core ID: %d\n", coreId);
+      xTaskCreatePinnedToCore(
+          anotherTask,    /* Function to implement the task */
+          "anotherTask",  /* Name of the task */
+          10000,          /* Stack size in words */
+          NULL,           /* Task input parameter */
+          0,              /* Priority of the task */
+          NULL,           /* Task handle. */
+          anotherCoreId); /* Core where the task should run */
+    }
+    else
+    {
+      // initLedc();
+    }
   }
 
   pinMode(LED_PIN, OUTPUT);
@@ -562,7 +600,6 @@ size_t frame_index = 0;
 
 void loop()
 {
-  delay(1000);
   Serial.println("before testFillCircle");
   // canvas->fillCircle(120, 120, 16, 0b110000);
   // testFillRainbow();
@@ -573,7 +610,7 @@ void loop()
   case 0:
     testFillRainbow();
     flushDisplay();
-    delay(10000);
+    delay(3000);
     break;
   case 1:
     canvas->fillScreen(0b010000);
@@ -609,19 +646,19 @@ void loop()
     memcpy(canvas->getBuffer(), images, 240 * 240);
     break;
   case 12:
-    for (int repeat = 0; repeat < 3; repeat++)
+    for (int repeat = 0; repeat < 1; repeat++)
     {
       for (int frame = 0; frame < 7; frame++)
       {
         memcpy(canvas->getBuffer(), anim_data_7[frame], 240 * 240);
         flushDisplay();
-        delay(3000);
+        delay(1000);
       }
     }
     // memcpy(canvas->getBuffer(), rainbow_image_data, 240 * 240);
     break;
   case 13:
-    for (int repeat = 0; repeat < 20; repeat++)
+    for (int repeat = 0; repeat < 10; repeat++)
     {
       for (int frame = 0; frame < 12; frame++)
       {
@@ -631,6 +668,11 @@ void loop()
       }
     }
     // memcpy(canvas->getBuffer(), rainbow_image_data, 240 * 240);
+    break;
+  case 14:
+    testFillRainbow();
+    flushDisplay();
+    delay(3000);
     break;
   default:
     break;
@@ -645,7 +687,19 @@ void loop()
   canvas->drawLine(x2, 0, x2, 240, 0b111111);
   flushDisplay();
   frame_index++;
-  frame_index = frame_index % 14;
+  if(frame_index >= 15) {
+    digitalWrite(XRST_PIN, LOW);
+    gpio_hold_en((gpio_num_t)XRST_PIN);
+    gpio_hold_en((gpio_num_t)VCOM_PIN);
+    gpio_hold_en((gpio_num_t)XFRP_PIN);
+    gpio_hold_en((gpio_num_t)FRP_PIN);
+    // gpio_deep_sleep_hold_en();
+    // esp_deep_sleep(3000000);
+    esp_sleep_enable_timer_wakeup(SLEEP_DURATION * 1000000ULL);  
+    Serial.println("Going to sleep now");
+    esp_deep_sleep_start();
+    frame_index = 0;
+  }
   delay(500);
   Serial.printf("flushDisplay took %d us\n", micros() - t);
 
