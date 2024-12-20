@@ -14,6 +14,7 @@
 #include "driver/gpio.h"
 
 #include "ParallelColorMemLCD.h"
+#include "elk.h"
 
 #define USE_2ND_CORE_PWM (1)
 
@@ -527,8 +528,11 @@ void loop2()
   delay(200);
 }
 
+char mem[200];
+
 void setup()
 {
+  struct js *js = js_create(mem, sizeof(mem));      // Create JS instance
   Serial.begin(115200);
   // pinMode(BACKLIGHT_PIN, OUTPUT);
   ledcSetup(BACKLIGHT_LEDC_CHANNEL, BL_FREQ, resolution);
