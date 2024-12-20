@@ -15,6 +15,8 @@
 
 #include "ParallelColorMemLCD.h"
 #include "elk.h"
+#include "duktape.h"
+
 
 #define USE_2ND_CORE_PWM (1)
 
@@ -530,9 +532,18 @@ void loop2()
 
 char mem[200];
 
+void test_duktape() {
+  duk_context *ctx = duk_create_heap_default();
+  duk_eval_string(ctx, "1+2");
+  printf("1+2=%d\n", (int) duk_get_int(ctx, -1));
+  duk_destroy_heap(ctx);
+}
+
 void setup()
 {
+  // elk: 1727629 -> 1727917 bytes = 288 bytes
   struct js *js = js_create(mem, sizeof(mem));      // Create JS instance
+  test_duktape(); // 1507161 bytes -> 1727917 bytes = 221756 bytes
   Serial.begin(115200);
   // pinMode(BACKLIGHT_PIN, OUTPUT);
   ledcSetup(BACKLIGHT_LEDC_CHANNEL, BL_FREQ, resolution);
