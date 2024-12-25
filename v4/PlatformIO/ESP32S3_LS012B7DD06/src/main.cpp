@@ -17,6 +17,9 @@
 #include "elk.h"
 #include "duktape.h"
 
+#define USE_FAST_DIRECT_WRITE (1)
+
+#define NEW_LCD_IO_CONNECTIONS (1)
 
 #define USE_2ND_CORE_PWM (1)
 
@@ -36,6 +39,7 @@ const int BACKLIGHT_LEDC_CHANNEL = 1;
 // BL
 #define BACKLIGHT_PIN 16
 
+#if !defined(NEW_LCD_IO_CONNECTIONS)
 // Pin definitions
 // GSP
 #define VST_PIN 1
@@ -65,11 +69,46 @@ const int BACKLIGHT_LEDC_CHANNEL = 1;
 // VCOM
 #define VCOM_PIN 15
 
+#else
+
+// Pin definitions
+// GSP
+#define VST_PIN 11
+// GCK
+#define VCK_PIN 41
+// GEN
+#define ENB_PIN 46
+// INTB
+#define XRST_PIN 40
+// VCOM same as FRP = VB
+#define FRP_PIN 10
+// VA = XFRP
+#define XFRP_PIN 9
+
+// BSP
+#define HST_PIN 45
+// BCK
+#define HCK_PIN 39
+
+// #define R1_PIN 44
+#define R1_PIN 17
+#define R2_PIN 38
+// #define G1_PIN 43
+#define G1_PIN 18
+
+#define G2_PIN 47
+#define B1_PIN 42
+#define B2_PIN 48
+
+// VCOM
+#define VCOM_PIN 8
+
+#endif
+
 // NO USE
 #define LED_PIN 21
 
-#define SLEEP_DURATION 100           // 深度睡眠时间（秒）  
-
+#define SLEEP_DURATION 100 // 深度睡眠时间（秒）
 
 #define COLOR_BLACK 0b00000000      // 黑色
 #define COLOR_WHITE 0b00111111      // 白色
@@ -185,12 +224,31 @@ bool vckState = LOW;
 //     GPIO.out1_w1ts.val = ((uint32_t)1 << (pin - 32));
 // }
 
+
+#define MY_DIGITAL_WRITE(pin, value) \
+  if (USE_FAST_DIRECT_WRITE)         \
+  {                                  \
+    if (value)                       \
+    {                                \
+      directWriteHigh(pin);          \
+    }                                \
+    else                             \
+    {                                \
+      directWriteLow(pin);           \
+    }                                \
+  }                                  \
+  else                               \
+  {                                  \
+    digitalWrite(pin, value);        \
+  }
+
+
 #define directWriteLow(pin)                               \
   do                                                      \
   {                                                       \
     if ((pin) < 32)                                       \
       GPIO.out_w1tc = ((uint32_t)1 << (pin));             \
-    else if ((pin) < 34)                                  \
+    else                                                  \
       GPIO.out1_w1tc.val = ((uint32_t)1 << ((pin) - 32)); \
   } while (0)
 
@@ -199,7 +257,7 @@ bool vckState = LOW;
   {                                                       \
     if ((pin) < 32)                                       \
       GPIO.out_w1ts = ((uint32_t)1 << (pin));             \
-    else if ((pin) < 34)                                  \
+    else                                                  \
       GPIO.out1_w1ts.val = ((uint32_t)1 << ((pin) - 32)); \
   } while (0)
 
@@ -269,24 +327,22 @@ void flushDisplay()
   {
     if (i == 1)
     {
-      // digitalWrite(VST_PIN, LOW);
-      directWriteLow(VST_PIN);
+      MY_DIGITAL_WRITE(VST_PIN, LOW);
       // delayMicroseconds(21000);
     }
 
     if (i >= 2 && i <= 481)
     {
-      // digitalWrite(HST_PIN, HIGH);
-      directWriteHigh(HST_PIN);
+      MY_DIGITAL_WRITE(HST_PIN, HIGH);
       hckState = !hckState; // Toggle HCK state
       // digitalWrite(HCK_PIN, hckState);
       if (hckState)
       {
-        directWriteHigh(HCK_PIN);
+        MY_DIGITAL_WRITE(HCK_PIN, HIGH);
       }
       else
       {
-        directWriteLow(HCK_PIN);
+        MY_DIGITAL_WRITE(HCK_PIN, LOW);
       }
 
       // delayMicroseconds(1000);
@@ -299,19 +355,16 @@ void flushDisplay()
       {
         if (j == 1)
         {
-          // digitalWrite(HST_PIN, LOW);
-          directWriteLow(HST_PIN);
+          MY_DIGITAL_WRITE(HST_PIN, LOW);
         }
         // 夏普屏在最后 ENB，JDI 在 20个 CLOCK的时候做 ENB
         if (j == 122)
         {
-          // digitalWrite(ENB_PIN, HIGH);
-          directWriteHigh(ENB_PIN);
+          MY_DIGITAL_WRITE(ENB_PIN, HIGH);
         }
         else if (j == 123)
         {
-          // digitalWrite(ENB_PIN, LOW);
-          directWriteLow(ENB_PIN);
+          MY_DIGITAL_WRITE(ENB_PIN, LOW);
         }
 
         if (j >= 2 && j <= 121)
@@ -392,15 +445,7 @@ void flushDisplay()
         // TODO
         // delayMicroseconds(500);
         hckState = !hckState;
-        // digitalWrite(HCK_PIN, hckState);
-        if (hckState)
-        {
-          directWriteHigh(HCK_PIN);
-        }
-        else
-        {
-          directWriteLow(HCK_PIN);
-        }
+        MY_DIGITAL_WRITE(HCK_PIN, hckState ? HIGH : LOW);
       }
       cost4 = portGET_RUN_TIME_COUNTER_VALUE() - cost0; // 9753 ticks -> 9753*4 = 39012ns: 39us
     }
@@ -412,15 +457,7 @@ void flushDisplay()
     // delayMicroseconds(500);
     // Toggle VCK state
     vckState = !vckState;
-    // digitalWrite(VCK_PIN, vckState);
-    if (vckState)
-    {
-      directWriteHigh(VCK_PIN);
-    }
-    else
-    {
-      directWriteLow(VCK_PIN);
-    }
+    MY_DIGITAL_WRITE(VCK_PIN, vckState ? HIGH : LOW);
   }
   // 19800 us / 4709264 ticks * 1000 = 4.2 nano seconds per tick
   auto total_cost = portGET_RUN_TIME_COUNTER_VALUE() - counter; // 4709264 ticks, 19800 us
@@ -523,7 +560,7 @@ void setup2()
 void loop2()
 {
   // gpio_deep_sleep_hold_dis()
-  gpio_hold_en(GPIO_NUM_16);
+  // gpio_hold_en(GPIO_NUM_16);
 
   auto t = touchRead(1);
   Serial.printf("%d\n", t);
@@ -532,18 +569,19 @@ void loop2()
 
 char mem[200];
 
-void test_duktape() {
+void test_duktape()
+{
   duk_context *ctx = duk_create_heap_default();
   duk_eval_string(ctx, "1+2");
-  printf("1+2=%d\n", (int) duk_get_int(ctx, -1));
+  printf("1+2=%d\n", (int)duk_get_int(ctx, -1));
   duk_destroy_heap(ctx);
 }
 
 void setup()
 {
   // elk: 1727629 -> 1727917 bytes = 288 bytes
-  struct js *js = js_create(mem, sizeof(mem));      // Create JS instance
-  test_duktape(); // 1507161 bytes -> 1727917 bytes = 221756 bytes
+  struct js *js = js_create(mem, sizeof(mem)); // Create JS instance
+  test_duktape();                              // 1507161 bytes -> 1727917 bytes = 221756 bytes
   Serial.begin(115200);
   // pinMode(BACKLIGHT_PIN, OUTPUT);
   ledcSetup(BACKLIGHT_LEDC_CHANNEL, BL_FREQ, resolution);
@@ -661,6 +699,7 @@ void loop()
     memcpy(canvas->getBuffer(), images, 240 * 240);
     break;
   case 12:
+    Serial.println("before case 12 (girls)");
     for (int repeat = 0; repeat < 1; repeat++)
     {
       for (int frame = 0; frame < 7; frame++)
@@ -673,14 +712,17 @@ void loop()
     // memcpy(canvas->getBuffer(), rainbow_image_data, 240 * 240);
     break;
   case 13:
+    Serial.println("before case 13 (rainbow cat)");
     for (int repeat = 0; repeat < 10; repeat++)
     {
+      auto m = micros();
       for (int frame = 0; frame < 12; frame++)
       {
         memcpy(canvas->getBuffer(), anim_data[frame], 240 * 240);
         flushDisplay();
-        delay(80);
+        // delay(80);
       }
+      Serial.printf("12 frames took %d us, %d us per frame\n", micros() - m, (micros() - m) / 12);
     }
     // memcpy(canvas->getBuffer(), rainbow_image_data, 240 * 240);
     break;
@@ -702,7 +744,8 @@ void loop()
   canvas->drawLine(x2, 0, x2, 240, 0b111111);
   flushDisplay();
   frame_index++;
-  if(frame_index >= 15) {
+  if (frame_index >= 15)
+  {
     digitalWrite(XRST_PIN, LOW);
     gpio_hold_en((gpio_num_t)XRST_PIN);
     gpio_hold_en((gpio_num_t)VCOM_PIN);
@@ -710,7 +753,7 @@ void loop()
     gpio_hold_en((gpio_num_t)FRP_PIN);
     // gpio_deep_sleep_hold_en();
     // esp_deep_sleep(3000000);
-    esp_sleep_enable_timer_wakeup(SLEEP_DURATION * 1000000ULL);  
+    esp_sleep_enable_timer_wakeup(SLEEP_DURATION * 1000000ULL);
     Serial.println("Going to sleep now");
     esp_deep_sleep_start();
     frame_index = 0;
