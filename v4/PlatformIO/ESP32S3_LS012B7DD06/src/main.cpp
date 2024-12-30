@@ -747,11 +747,12 @@ void loop()
   if (frame_index >= 15)
   {
     digitalWrite(XRST_PIN, LOW);
-    gpio_hold_en((gpio_num_t)XRST_PIN);
-    gpio_hold_en((gpio_num_t)VCOM_PIN);
-    gpio_hold_en((gpio_num_t)XFRP_PIN);
-    gpio_hold_en((gpio_num_t)FRP_PIN);
-    // gpio_deep_sleep_hold_en();
+    // gpio_hold_en((gpio_num_t)XRST_PIN);
+    // gpio_hold_en((gpio_num_t)VCOM_PIN);
+    // gpio_hold_en((gpio_num_t)XFRP_PIN);
+    // gpio_hold_en((gpio_num_t)FRP_PIN);
+    // hold 上面四个好像还不够，还是会有问题
+    gpio_deep_sleep_hold_en();
     // esp_deep_sleep(3000000);
     esp_sleep_enable_timer_wakeup(SLEEP_DURATION * 1000000ULL);
     Serial.println("Going to sleep now");
