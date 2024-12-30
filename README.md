@@ -1,3 +1,5 @@
+# ThymeWatch V4
+ESP32-S3 Smart Watch with 64-colors Round SHARP Memory Display
 
 # ThymeWatch V3
 ESP32-S3 Smart Watch with JDI Memory Display
